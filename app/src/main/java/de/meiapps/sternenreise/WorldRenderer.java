@@ -2,6 +2,7 @@ package de.meiapps.sternenreise;
 
 import android.graphics.*;
 import android.opengl.*;
+import android.opengl.Matrix;
 import android.os.SystemClock;
 import java.nio.*;
 import java.util.*;

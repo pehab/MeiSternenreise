@@ -9,5 +9,7 @@ grep -q 'OK (1 test)' device-results/instrumentation.txt
 adb shell am start -n de.meiapps.sternenreise/.MainActivity
 sleep 2
 adb exec-out screencap -p > device-results/menu.png
+adb pull /sdcard/Android/data/de.meiapps.sternenreise/files/phone.png device-results/phone.png
+adb pull /sdcard/Android/data/de.meiapps.sternenreise/files/stereo.png device-results/stereo.png
 adb logcat -d > device-results/logcat.txt
 if grep -E 'FATAL EXCEPTION|Fatal signal' device-results/logcat.txt; then exit 1; fi

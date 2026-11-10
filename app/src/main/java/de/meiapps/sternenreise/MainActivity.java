@@ -35,7 +35,9 @@ public final class MainActivity extends Activity implements WorldRenderer.Events
             if(speakingReady&&speech.getVoices()!=null)for(Voice voice:speech.getVoices())if(voice.getLocale().getLanguage().equals("de")&&!voice.isNetworkConnectionRequired()){speech.setVoice(voice);break;}
             speech.setSpeechRate(.88f);
         }});
-        updates=GitHubUpdates.attach(this,REPOSITORY,this::showMenu);showMenu();
+        updates=GitHubUpdates.attach(this,REPOSITORY,this::showMenu);
+        if(Build.VERSION.SDK_INT>=33)getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,this::showMenu);
+        showMenu();
     }
     private void immersive(){getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN|View.SYSTEM_UI_FLAG_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION|View.SYSTEM_UI_FLAG_LAYOUT_STABLE);}
     private void speak(String text){if(speakingReady&&foreground&&prefs.getBoolean("voice",true))speech.speak(text,TextToSpeech.QUEUE_FLUSH,null,"lumi");}
@@ -73,7 +75,7 @@ public final class MainActivity extends Activity implements WorldRenderer.Events
         .setNegativeButton("Zurück",null).setPositiveButton("Los geht’s",(d,n)->countdown()).show();}
     private void countdown(){stopGame();TextView counter=text("",44,0xffffdf9d);counter.setGravity(Gravity.CENTER);counter.setBackgroundColor(0xff101a32);setContentView(counter);immersive();
         for(int i=0;i<5;i++){final int remaining=5-i;handler.postDelayed(()->counter.setText("Handy in die Brille legen\n"+remaining),i*1000L);}handler.postDelayed(()->startGame(true),5000);}
-    private void startGame(boolean stereo){
+    void startGame(boolean stereo){
         stopGame();vr=stereo;inGame=true;tracker.center();
         surface=new GLSurfaceView(this);surface.setEGLContextClientVersion(2);surface.setPreserveEGLContextOnPause(true);
         renderer=new WorldRenderer(game,tracker,stereo,prefs.getFloat("lens",.16f),prefs.getFloat("ipd",.064f),this);surface.setRenderer(renderer);
