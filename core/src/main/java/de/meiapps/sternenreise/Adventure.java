@@ -23,9 +23,9 @@ public final class Adventure {
     public String hint() {
         if (finished) return "Du hast das Sternenlicht zurückgebracht! Danke, Sternenfreund!";
         return switch(room) {
-            case WORKSHOP -> !key ? "Ich bin Lumi! Suche den goldenen Schlüssel im Regal." : !seed ? "In der kleinen Truhe wartet ein Mondensamen." : "Schau die grüne Tür an. Im Garten braucht dein Samen Wasser.";
-            case GARDEN -> !water ? "Pflanze den Samen in den Topf. Dann schau die Gießkanne an." : !crystal ? "Die Mondblume leuchtet! Nimm ihren blauen Kristall." : "Der Kristall öffnet die blaue Tür zur Sternwarte.";
-            case OBSERVATORY -> !lens ? "Am Pult steht die Reihenfolge: Stern, Mond, Sonne. Schau die passenden Symbole an." : "Setze die Linse und den Kristall in die Sternenmaschine!";
+            case WORKSHOP -> !key ? "Ich bin Lumi! Suche den goldenen Schlüssel im Regal." : !seed ? "In der kleinen Truhe wartet ein Mondensamen." : "Schau die Tür zum Garten an. Dort braucht dein Samen Wasser.";
+            case GARDEN -> !water ? "Pflanze den Samen in den Topf. Dann schau die Gießkanne an." : !crystal ? "Die Mondblume leuchtet! Nimm ihren blauen Kristall." : "Der Kristall öffnet die Tür zur Sternwarte.";
+            case OBSERVATORY -> !lens ? "Am Pult gilt die Reihenfolge: Stern, Mond, Sonne. Schau die passenden Symbole an." : "Setze die Linse und den Kristall in die Sternenmaschine!";
         };
     }
     public String act(String id) {
@@ -45,7 +45,7 @@ public final class Adventure {
                 case "water": if (!planted) return "Lege zuerst den Mondensamen in den Topf. Schau dafür den Topf an.";
                     water = true; return "Plitsch, platsch! Der Samen wächst zu einer leuchtenden Mondblume. Schau sie an!";
                 case "flower": if (!water) return "Hier kann eine Mondblume wachsen. Schau erst die Gießkanne an.";
-                    crystal = true; return "Die Blume schenkt dir einen Sternenkristall. Die blaue Tür leuchtet!";
+                    crystal = true; return "Die Blume schenkt dir einen Sternenkristall. Die Tür zur Sternwarte leuchtet!";
                 case "observatory": if (!crystal) return "Die Tür braucht das Licht eines Sternenkristalls.";
                     room = Room.OBSERVATORY; return hint();
             }

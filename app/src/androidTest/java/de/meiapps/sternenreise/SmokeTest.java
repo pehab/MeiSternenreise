@@ -1,35 +1,78 @@
 package de.meiapps.sternenreise;
-import android.app.*;
+
+import android.app.Activity;
+import android.app.Instrumentation;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import java.io.File;
-import java.io.FileOutputStream;
 import android.os.SystemClock;
-import android.view.*;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
+import java.io.File;
+import java.io.FileOutputStream;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import static org.junit.Assert.*;
+
 @RunWith(AndroidJUnit4.class)
 public class SmokeTest {
-    private Button find(View v,String label){if(v instanceof Button&&label.equals(((Button)v).getText().toString()))return (Button)v;if(v instanceof ViewGroup){ViewGroup g=(ViewGroup)v;for(int i=0;i<g.getChildCount();i++){Button found=find(g.getChildAt(i),label);if(found!=null)return found;}}return null;}
-    @Test public void opensRendersAndResumesWithoutSensor() throws Exception {
-        Instrumentation i=InstrumentationRegistry.getInstrumentation();
-        Activity a=i.startActivitySync(new Intent(i.getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-        i.waitForIdleSync();assertNotNull(a);
-        i.runOnMainSync(()->{Button b=find(a.getWindow().getDecorView(),"Am Handy spielen");assertNotNull(b);b.performClick();});
-        SystemClock.sleep(2200);i.waitForIdleSync();
-        assertFalse(a.isFinishing());screenshot(i,"phone.png");
-        i.runOnMainSync(()->((MainActivity)a).startGame(true));SystemClock.sleep(1200);i.waitForIdleSync();screenshot(i,"stereo.png");
-        i.runOnMainSync(a::onBackPressed);i.waitForIdleSync();
-        i.runOnMainSync(()->assertNotNull(find(a.getWindow().getDecorView(),"Am Handy spielen")));
-        SystemClock.sleep(500);screenshot(i,"menu.png");
-        i.runOnMainSync(()->a.recreate());i.waitForIdleSync();
+    private Button find(View view,String label) {
+        if(view instanceof Button && label.equals(((Button)view).getText().toString()))return (Button)view;
+        if(view instanceof ViewGroup) {
+            ViewGroup group=(ViewGroup)view;
+            for(int index=0;index<group.getChildCount();index++) {
+                Button found=find(group.getChildAt(index),label);if(found!=null)return found;
+            }
+        }
+        return null;
     }
-    private void screenshot(Instrumentation i,String name) throws Exception {
-        Bitmap image=i.getUiAutomation().takeScreenshot();assertNotNull(image);
-        try(FileOutputStream out=new FileOutputStream(new File(i.getTargetContext().getExternalFilesDir(null),name))){assertTrue(image.compress(Bitmap.CompressFormat.PNG,100,out));}finally{image.recycle();}
+    @Test public void rendersEveryLocationAndCompletesAdventureInBothModes() throws Exception {
+        Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
+        Activity activity=instrumentation.startActivitySync(new Intent(instrumentation.getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        instrumentation.waitForIdleSync();assertNotNull(activity);
+        instrumentation.runOnMainSync(()->{
+            Button play=find(activity.getWindow().getDecorView(),"Am Handy spielen");assertNotNull(play);play.performClick();
+        });
+        SystemClock.sleep(1400);instrumentation.waitForIdleSync();
+        assertFalse(activity.isFinishing());screenshot(instrumentation,"phone.png");
+        instrumentation.runOnMainSync(()->((MainActivity)activity).startGame(true));
+        SystemClock.sleep(900);instrumentation.waitForIdleSync();screenshot(instrumentation,"stereo.png");
+        instrumentation.runOnMainSync(()->((MainActivity)activity).startGame(false));
+        SystemClock.sleep(600);
+        activate(instrumentation,activity,"key");activate(instrumentation,activity,"chest");activate(instrumentation,activity,"garden");
+        assertEquals(Adventure.Room.GARDEN,saved(instrumentation).room());
+        SystemClock.sleep(600);screenshot(instrumentation,"garden.png");
+        activate(instrumentation,activity,"pot");activate(instrumentation,activity,"water");activate(instrumentation,activity,"flower");
+        SystemClock.sleep(300);screenshot(instrumentation,"flower.png");
+        activate(instrumentation,activity,"observatory");
+        assertEquals(Adventure.Room.OBSERVATORY,saved(instrumentation).room());
+        SystemClock.sleep(600);screenshot(instrumentation,"observatory.png");
+        activate(instrumentation,activity,"star");activate(instrumentation,activity,"moon");activate(instrumentation,activity,"sun");activate(instrumentation,activity,"machine");
+        assertTrue(saved(instrumentation).finished());
+        SystemClock.sleep(400);screenshot(instrumentation,"ending.png");
+        instrumentation.runOnMainSync(activity::onBackPressed);instrumentation.waitForIdleSync();
+        instrumentation.runOnMainSync(()->assertNotNull(find(activity.getWindow().getDecorView(),"Am Handy spielen")));
+        SystemClock.sleep(300);screenshot(instrumentation,"menu.png");
+        instrumentation.runOnMainSync(activity::recreate);instrumentation.waitForIdleSync();
+        assertTrue(saved(instrumentation).finished());
+    }
+    private Adventure saved(Instrumentation instrumentation) {
+        return Adventure.restore(instrumentation.getTargetContext().getSharedPreferences("adventure",0).getString("state",""));
+    }
+    private void activate(Instrumentation instrumentation,Activity activity,String action) {
+        String before=saved(instrumentation).save();
+        instrumentation.runOnMainSync(()->((MainActivity)activity).activate(action));
+        long deadline=SystemClock.uptimeMillis()+4000;
+        while(before.equals(saved(instrumentation).save()) && SystemClock.uptimeMillis()<deadline)SystemClock.sleep(25);
+        assertNotEquals("Action must reach the renderer and persist: "+action,before,saved(instrumentation).save());
+        instrumentation.waitForIdleSync();
+    }
+    private void screenshot(Instrumentation instrumentation,String name) throws Exception {
+        Bitmap image=instrumentation.getUiAutomation().takeScreenshot();assertNotNull(image);
+        try(FileOutputStream output=new FileOutputStream(new File(instrumentation.getTargetContext().getExternalFilesDir(null),name))) {
+            assertTrue(image.compress(Bitmap.CompressFormat.PNG,100,output));
+        }finally{image.recycle();}
     }
 }
