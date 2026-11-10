@@ -3,7 +3,7 @@
 - Lumi, Schlüssel und Truhe stehen auf den gemalten Ablagen statt vor den Möbeln zu schweben.
 - Topf, Sprössling und Mondblume behalten beim Wachsen denselben Fußpunkt auf der Gartenmauer; die Pflanze bleibt vollständig auswählbar.
 - Gießkanne und Sternenmaschine sind an Mauer und Sockel ausgerichtet.
-- Hinweise sitzen tiefer, der Rückweg zum Menü am Ende bleibt neben dem Text erreichbar.
+- Hinweise sitzen unter dem Titel über der Spielfläche; der Rückweg zum Menü am Ende bleibt frei erreichbar.
 
 # 0.2.0
 

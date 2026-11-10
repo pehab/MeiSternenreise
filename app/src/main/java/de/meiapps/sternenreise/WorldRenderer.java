@@ -157,8 +157,8 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
             }
             Matrix.setIdentityM(view,0);
             if(stereo)Matrix.translateM(view,0,eye==0?eyeSeparation/2:-eyeSeparation/2,0,0);
-            drawCaption(game.finished()?"Geschafft! · Sternenlicht gerettet":game.title(),0,1.03f,-2.3f,.92f,"title",true);
-            drawCaption(message,0,-1.12f,-2.3f,1.03f,"message",true);
+            drawCaption(game.finished()?"Geschafft! · Sternenlicht gerettet":game.title(),0,1.21f,-2.3f,.75f,"title",true);
+            drawCaption(message,0,.77f,-2.3f,1.03f,"message",true);
             drawReticle(focused!=null,progress);
             glBindFramebuffer(GL_FRAMEBUFFER,0);glViewport(stereo?eye*eyeWidth:0,0,eyeWidth,height);
             glUseProgram(distortionProgram);position(distortionPosition);
