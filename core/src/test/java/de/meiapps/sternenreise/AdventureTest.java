@@ -21,7 +21,7 @@ public class AdventureTest {
         a.act("sun");assertEquals(0,a.symbols());a.act("star");a.act("moon");a.act("sun");assertEquals(3,a.symbols());assertTrue(a.hasLens());
         assertTrue(a.hint().contains("maschine"));a.act("sun");a.act("machine");assertTrue(a.finished());
         a=Adventure.restore(a.save());assertTrue(a.finished());assertTrue(a.hint().contains("zurückgebracht"));
-        a.act("back");assertEquals(Adventure.Room.GARDEN,a.room());a.act("back");assertEquals(Adventure.Room.WORKSHOP,a.room());assertTrue(a.title().contains("Werkstatt"));
+        a.act("back");assertEquals(Adventure.Room.GARDEN,a.room());a.act("back");assertEquals(Adventure.Room.WORKSHOP,a.room());assertEquals("Die Sternenwerkstatt",a.title());
     }
     @Test public void everyCheckpointRoundTrips(){
         Adventure a=new Adventure();for(String action:new String[]{"hint","unknown","key","chest","garden","unknown","pot","water","flower","observatory","unknown","star","moon","sun","machine","back","back"}){

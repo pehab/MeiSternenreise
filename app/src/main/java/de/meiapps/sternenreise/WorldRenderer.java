@@ -22,6 +22,7 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
     private final List<Solid> solids=new ArrayList<>();
     private final List<Target> targets=new ArrayList<>();
     private final Map<String,Integer> textTextures=new HashMap<>();
+    private final Map<FloatBuffer,FloatBuffer> meshNormals=new IdentityHashMap<>();
     private Adventure game;
     private String message;
     private boolean stereo;
@@ -50,8 +51,8 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
     void refresh(String text) { message=text; rebuild(); }
     private static FloatBuffer buffer(float[] values) { FloatBuffer b=ByteBuffer.allocateDirect(values.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer();b.put(values).position(0);return b; }
     @Override public void onSurfaceCreated(GL10 unused,EGLConfig config) {
-        program=link("attribute vec3 a; attribute vec2 t; uniform mat4 m; varying vec2 uv; void main(){gl_Position=m*vec4(a,1.);uv=t;}",
-            "precision mediump float; uniform vec4 c; uniform sampler2D s; uniform float textured; varying vec2 uv;void main(){gl_FragColor=mix(c,texture2D(s,uv)*c,textured);}");
+        program=link("attribute vec3 a; attribute vec3 n; attribute vec2 t; uniform mat4 m; uniform float lit; varying vec2 uv; varying float light; void main(){gl_Position=m*vec4(a,1.);uv=t;light=mix(1.,.48+.52*max(0.,dot(n,normalize(vec3(-.3,.8,.5)))),lit);}",
+            "precision mediump float; uniform vec4 c; uniform sampler2D s; uniform float textured; varying vec2 uv;varying float light;void main(){vec4 base=mix(c,texture2D(s,uv)*c,textured);gl_FragColor=vec4(base.rgb*light,base.a);}");
         distortionProgram=link("attribute vec3 a; varying vec2 p;void main(){gl_Position=vec4(a,1.);p=a.xy;}",
             "precision mediump float;varying vec2 p;uniform sampler2D s;uniform float k;uniform float fade;void main(){float r=dot(p,p);vec2 q=p*(1.+k*r);vec2 uv=(q+1.)*.5;if(abs(q.x)>1.||abs(q.y)>1.)gl_FragColor=vec4(0.,0.,0.,1.);else gl_FragColor=vec4(texture2D(s,uv).rgb*fade,1.);}");
         textTextures.clear();eyeTexture=0;fbo=0;depth=0;
@@ -184,11 +185,13 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
         glUseProgram(program);Matrix.multiplyMM(tmp,0,view,0,model,0);Matrix.multiplyMM(mvp,0,projection,0,tmp,0);
         glUniformMatrix4fv(glGetUniformLocation(program,"m"),1,false,mvp,0);
         glUniform4f(glGetUniformLocation(program,"c"),Color.red(color)/255f,Color.green(color)/255f,Color.blue(color)/255f,1);
-        int a=glGetAttribLocation(program,"a"),t=glGetAttribLocation(program,"t");glEnableVertexAttribArray(a);vertices.position(0);glVertexAttribPointer(a,3,GL_FLOAT,false,0,vertices);
+        int a=glGetAttribLocation(program,"a"),t=glGetAttribLocation(program,"t"),normal=glGetAttribLocation(program,"n");
+        glUniform1f(glGetUniformLocation(program,"lit"),texture==0&&!strip?1:0);
+        if(!strip){FloatBuffer normals=meshNormals.get(vertices);if(normals==null){normals=normals(vertices);meshNormals.put(vertices,normals);}glEnableVertexAttribArray(normal);normals.position(0);glVertexAttribPointer(normal,3,GL_FLOAT,false,0,normals);}else{glDisableVertexAttribArray(normal);glVertexAttrib3f(normal,0,0,1);}glEnableVertexAttribArray(a);vertices.position(0);glVertexAttribPointer(a,3,GL_FLOAT,false,0,vertices);
         glUniform1f(glGetUniformLocation(program,"textured"),texture==0?0:1);
         glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,texture==0?whiteTexture:texture);glUniform1i(glGetUniformLocation(program,"s"),0);
         if(texture!=0){glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,texture);glUniform1i(glGetUniformLocation(program,"s"),0);glEnableVertexAttribArray(t);uv.position(0);glVertexAttribPointer(t,2,GL_FLOAT,false,0,uv);}
-        glDrawArrays(strip?GL_TRIANGLE_STRIP:GL_TRIANGLES,0,count);glDisableVertexAttribArray(a);if(texture!=0)glDisableVertexAttribArray(t);
+        glDrawArrays(strip?GL_TRIANGLE_STRIP:GL_TRIANGLES,0,count);glDisableVertexAttribArray(a);glDisableVertexAttribArray(normal);if(texture!=0)glDisableVertexAttribArray(t);
     }
     private int makeText(String text){
         Bitmap b=Bitmap.createBitmap(1024,256,Bitmap.Config.ARGB_8888);Canvas c=new Canvas(b);Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -196,6 +199,16 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
         List<String> lines=new ArrayList<>();String line="";for(String word:text.split(" ")){String next=line.isEmpty()?word:line+" "+word;if(p.measureText(next)>940){lines.add(line);line=word;}else line=next;}lines.add(line);
         float y=128-(lines.size()-1)*24;for(String l:lines){c.drawText(l,512,y+14,p);y+=48;}
         int[] id=new int[1];glGenTextures(1,id,0);glBindTexture(GL_TEXTURE_2D,id[0]);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);GLUtils.texImage2D(GL_TEXTURE_2D,0,b,0);b.recycle();return id[0];
+    }
+    private static FloatBuffer normals(FloatBuffer vertices){
+        float[] data=new float[vertices.capacity()];
+        for(int i=0;i+8<data.length;i+=9){
+            float ax=vertices.get(i+3)-vertices.get(i),ay=vertices.get(i+4)-vertices.get(i+1),az=vertices.get(i+5)-vertices.get(i+2);
+            float bx=vertices.get(i+6)-vertices.get(i),by=vertices.get(i+7)-vertices.get(i+1),bz=vertices.get(i+8)-vertices.get(i+2);
+            float nx=ay*bz-az*by,ny=az*bx-ax*bz,nz=ax*by-ay*bx,length=(float)Math.sqrt(nx*nx+ny*ny+nz*nz);
+            if(length==0)length=1;for(int v=0;v<3;v++){data[i+v*3]=nx/length;data[i+v*3+1]=ny/length;data[i+v*3+2]=nz/length;}
+        }
+        return buffer(data);
     }
     private static FloatBuffer symbolMesh(int kind){
         java.util.ArrayList<Float> vertices=new java.util.ArrayList<>();
