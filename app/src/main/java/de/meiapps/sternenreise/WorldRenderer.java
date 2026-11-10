@@ -13,7 +13,9 @@ import static android.opengl.GLES20.*;
 final class WorldRenderer implements GLSurfaceView.Renderer {
     interface Events { void activate(String id); void menu(); }
     private record Target(String id,String label,float x,float y,float z,int color) { }
-    private record Solid(float x,float y,float z,float sx,float sy,float sz,int color,boolean gem) { }
+    private record Solid(float x,float y,float z,float sx,float sy,float sz,int color,int shape) {
+        Solid(float x,float y,float z,float sx,float sy,float sz,int color,boolean gem) { this(x,y,z,sx,sy,sz,color,gem?1:0); }
+    }
     private final HeadTracker tracker;
     private final Events events;
     private final Gaze gaze = new Gaze();
@@ -25,7 +27,7 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
     private boolean stereo;
     private volatile float yaw,pitch;
     private float lens,eyeSeparation;
-    private int width,height,eyeWidth,program,distortionProgram,fbo,eyeTexture,depth;
+    private int width,height,eyeWidth,program,distortionProgram,fbo,eyeTexture,depth,whiteTexture;
     private int lastRoom=-1;
     private long fadeStart;
     private final float[] head=new float[16],projection=new float[16],view=new float[16],model=new float[16],mvp=new float[16],tmp=new float[16];
@@ -37,6 +39,7 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
         -1,1,1, 1,1,1, 1,1,-1, -1,1,1, 1,1,-1, -1,1,-1,
         -1,-1,-1, 1,-1,-1, 1,-1,1, -1,-1,-1, 1,-1,1, -1,-1,1});
     private final FloatBuffer gem=buffer(new float[]{0,1,0,-1,0,0,0,0,1, 0,1,0,0,0,1,1,0,0, 0,1,0,1,0,0,0,0,-1, 0,1,0,0,0,-1,-1,0,0, 0,-1,0,0,0,1,-1,0,0, 0,-1,0,1,0,0,0,0,1, 0,-1,0,0,0,-1,1,0,0, 0,-1,0,-1,0,0,0,0,-1});
+    private final FloatBuffer star=symbolMesh(0),moon=symbolMesh(1),sun=symbolMesh(2);
     private final FloatBuffer quad=buffer(new float[]{-1,-1,0,1,-1,0,-1,1,0,1,1,0});
     private final FloatBuffer uv=buffer(new float[]{0,1,1,1,0,0,1,0});
     WorldRenderer(Adventure game,HeadTracker tracker,boolean stereo,float lens,float eyeSeparation,Events events) {
@@ -52,6 +55,10 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
         distortionProgram=link("attribute vec3 a; varying vec2 p;void main(){gl_Position=vec4(a,1.);p=a.xy;}",
             "precision mediump float;varying vec2 p;uniform sampler2D s;uniform float k;uniform float fade;void main(){float r=dot(p,p);vec2 q=p*(1.+k*r);vec2 uv=(q+1.)*.5;if(abs(q.x)>1.||abs(q.y)>1.)gl_FragColor=vec4(0.,0.,0.,1.);else gl_FragColor=vec4(texture2D(s,uv).rgb*fade,1.);}");
         textTextures.clear();eyeTexture=0;fbo=0;depth=0;
+        int[] white=new int[1];glGenTextures(1,white,0);whiteTexture=white[0];glBindTexture(GL_TEXTURE_2D,whiteTexture);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+        ByteBuffer pixel=ByteBuffer.allocateDirect(4);pixel.put(new byte[]{-1,-1,-1,-1}).position(0);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,1,1,0,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
         glEnable(GL_DEPTH_TEST); glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
         rebuild();
     }
@@ -145,7 +152,7 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
             case OBSERVATORY -> {
                 add(0,-1.35f,-3.3f,2,.2f,.7f,0xff8f7198);
                 String[] ids={"star","moon","sun"},labels={"Stern","Mond","Sonne"};int[] colors={0xffffdc81,0xffb8c9ff,0xffffac76};
-                for(int i=0;i<3;i++){float x=(i-1)*1.25f;target(ids[i],labels[i],x,-.35f,-3,colors[i]);solids.add(new Solid(x,-.35f,-3,.3f,.35f,.15f,game.symbols()>i?0xff85f3ca:colors[i],true));}
+                for(int i=0;i<3;i++){float x=(i-1)*1.25f;target(ids[i],labels[i],x,-.35f,-3,colors[i]);solids.add(new Solid(x,-.35f,-3,.3f,.35f,.15f,game.symbols()>i?0xff85f3ca:colors[i],i+2));}
                 target("machine",game.finished()?"Sternenlicht!":"Sternenmaschine",2.6f,.4f,-2.2f,0xffffd477);
                 add(2.6f,-.9f,-2.2f,.55f,.65f,.45f,0xff667ba8);solids.add(new Solid(2.6f,.4f,-2.2f,.5f,.65f,.5f,game.finished()?0xffffedaa:0xff7999c5,true));
                 if(game.finished())for(int i=0;i<20;i++){double a=i*Math.PI*2/20;solids.add(new Solid((float)Math.sin(a)*3.8f,1.7f,(float)Math.cos(a)*3.8f,.15f,.25f,.15f,0xffffdf85,true));}
@@ -157,7 +164,11 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
     private void add(float x,float y,float z,float sx,float sy,float sz,int c){solids.add(new Solid(x,y,z,sx,sy,sz,c,false));}
     private void robot(float x,float y,float z){add(x,y-.4f,z,.3f,.35f,.22f,0xff62b9be);add(x,y+.15f,z,.4f,.28f,.25f,0xffe1d0a6);add(x-.16f,y+.17f,z+.26f,.065f,.065f,.02f,0xff234352);add(x+.16f,y+.17f,z+.26f,.065f,.065f,.02f,0xff234352);add(x,y+.55f,z,.025f,.12f,.025f,0xffffdc81);}
     private void door(String id,String label,float x,float y,float z,int color){target(id,label,x,y,z,color);add(x,y-.3f,z,.66f,1.2f,.12f,color);add(x+.42f,y-.3f,z+.15f,.07f,.07f,.05f,0xffffda86);}
-    private void drawSolid(Solid s){drawBox(s.x,s.y,s.z,s.sx,s.sy,s.sz,s.color,s.gem);}
+    private void drawSolid(Solid s){
+        if(s.shape<2){drawBox(s.x,s.y,s.z,s.sx,s.sy,s.sz,s.color,s.shape==1);return;}
+        Matrix.setIdentityM(model,0);Matrix.translateM(model,0,s.x,s.y,s.z);Matrix.scaleM(model,0,s.sx,s.sy,s.sz);
+        FloatBuffer mesh=s.shape==2?star:s.shape==3?moon:sun;draw(mesh,mesh.capacity()/3,s.color,0,false);
+    }
     private void drawBox(float x,float y,float z,float sx,float sy,float sz,int c,boolean isGem){
         Matrix.setIdentityM(model,0);Matrix.translateM(model,0,x,y,z);Matrix.scaleM(model,0,sx,sy,sz);
         if(isGem)Matrix.rotateM(model,0,(SystemClock.uptimeMillis()%18000)/50f,0,1,0);
@@ -175,6 +186,7 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
         glUniform4f(glGetUniformLocation(program,"c"),Color.red(color)/255f,Color.green(color)/255f,Color.blue(color)/255f,1);
         int a=glGetAttribLocation(program,"a"),t=glGetAttribLocation(program,"t");glEnableVertexAttribArray(a);vertices.position(0);glVertexAttribPointer(a,3,GL_FLOAT,false,0,vertices);
         glUniform1f(glGetUniformLocation(program,"textured"),texture==0?0:1);
+        glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,texture==0?whiteTexture:texture);glUniform1i(glGetUniformLocation(program,"s"),0);
         if(texture!=0){glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,texture);glUniform1i(glGetUniformLocation(program,"s"),0);glEnableVertexAttribArray(t);uv.position(0);glVertexAttribPointer(t,2,GL_FLOAT,false,0,uv);}
         glDrawArrays(strip?GL_TRIANGLE_STRIP:GL_TRIANGLES,0,count);glDisableVertexAttribArray(a);if(texture!=0)glDisableVertexAttribArray(t);
     }
@@ -185,5 +197,24 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
         float y=128-(lines.size()-1)*24;for(String l:lines){c.drawText(l,512,y+14,p);y+=48;}
         int[] id=new int[1];glGenTextures(1,id,0);glBindTexture(GL_TEXTURE_2D,id[0]);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);GLUtils.texImage2D(GL_TEXTURE_2D,0,b,0);b.recycle();return id[0];
     }
+    private static FloatBuffer symbolMesh(int kind){
+        java.util.ArrayList<Float> vertices=new java.util.ArrayList<>();
+        int count=kind==0?10:kind==1?48:48;
+        for(int i=0;i<count;i++){
+            double a=Math.PI/2+i*2*Math.PI/count,b=Math.PI/2+(i+1)*2*Math.PI/count;
+            if(kind==1){
+                // Outer left arc and a shifted, inset arc meet at both crescent tips.
+                a=Math.PI/3+i*(4*Math.PI/3)/count;b=Math.PI/3+(i+1)*(4*Math.PI/3)/count;
+                float ox=(float)Math.cos(a),oy=(float)Math.sin(a),px=(float)Math.cos(b),py=(float)Math.sin(b);
+                float ix=.5f+.72f*(ox-.5f),iy=oy,jx=.5f+.72f*(px-.5f),jy=py;
+                addTriangle(vertices,ox,oy,px,py,ix,iy);addTriangle(vertices,px,py,jx,jy,ix,iy);
+            }else{
+                float ra=kind==0?(i%2==0?1:.43f):(i%4==0?1:.73f),rb=kind==0?((i+1)%2==0?1:.43f):((i+1)%4==0?1:.73f);
+                addTriangle(vertices,0,0,(float)Math.cos(a)*ra,(float)Math.sin(a)*ra,(float)Math.cos(b)*rb,(float)Math.sin(b)*rb);
+            }
+        }
+        float[] data=new float[vertices.size()];for(int i=0;i<data.length;i++)data[i]=vertices.get(i);return buffer(data);
+    }
+    private static void addTriangle(java.util.List<Float> data,float ax,float ay,float bx,float by,float cx,float cy){for(float v:new float[]{ax,ay,0,bx,by,0,cx,cy,0})data.add(v);}
     private static int link(String v,String f){int p=glCreateProgram();for(int type:new int[]{GL_VERTEX_SHADER,GL_FRAGMENT_SHADER}){int s=glCreateShader(type);glShaderSource(s,type==GL_VERTEX_SHADER?v:f);glCompileShader(s);int[] ok=new int[1];glGetShaderiv(s,GL_COMPILE_STATUS,ok,0);if(ok[0]==0)throw new IllegalStateException(glGetShaderInfoLog(s));glAttachShader(p,s);glDeleteShader(s);}glLinkProgram(p);int[] ok=new int[1];glGetProgramiv(p,GL_LINK_STATUS,ok,0);if(ok[0]==0)throw new IllegalStateException(glGetProgramInfoLog(p));return p;}
 }

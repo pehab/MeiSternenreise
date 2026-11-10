@@ -19,7 +19,7 @@ public class AdventureTest {
         Adventure a=observatory();assertFalse(a.hasLens());assertTrue(a.hint().contains("Stern, Mond, Sonne"));
         a.act("moon");assertEquals(0,a.symbols());a.act("star");a.act("star");assertEquals(1,a.symbols());
         a.act("sun");assertEquals(0,a.symbols());a.act("star");a.act("moon");a.act("sun");assertEquals(3,a.symbols());assertTrue(a.hasLens());
-        assertTrue(a.hint().contains("Maschine"));a.act("sun");a.act("machine");assertTrue(a.finished());
+        assertTrue(a.hint().contains("maschine"));a.act("sun");a.act("machine");assertTrue(a.finished());
         a=Adventure.restore(a.save());assertTrue(a.finished());assertTrue(a.hint().contains("zurückgebracht"));
         a.act("back");assertEquals(Adventure.Room.GARDEN,a.room());a.act("back");assertEquals(Adventure.Room.WORKSHOP,a.room());assertTrue(a.title().contains("Werkstatt"));
     }
