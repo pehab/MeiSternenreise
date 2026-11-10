@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+mkdir -p device-results
+adb install -r "$(find test-apks -name app-github-debug.apk -print -quit)"
+adb install -r "$(find test-apks -name app-github-debug-androidTest.apk -print -quit)"
+adb logcat -c
+adb shell am instrument -w de.meiapps.sternenreise.test/androidx.test.runner.AndroidJUnitRunner | tee device-results/instrumentation.txt
+grep -q 'OK (1 test)' device-results/instrumentation.txt
+adb shell am start -n de.meiapps.sternenreise/.MainActivity
+sleep 2
+adb exec-out screencap -p > device-results/menu.png
+adb logcat -d > device-results/logcat.txt
+if grep -E 'FATAL EXCEPTION|Fatal signal' device-results/logcat.txt; then exit 1; fi

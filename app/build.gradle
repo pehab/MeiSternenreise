@@ -1,0 +1,41 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'de.meiapps.sternenreise'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'de.meiapps.sternenreise'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+    flavorDimensions += 'distribution'
+    productFlavors {
+        github { dimension 'distribution' }
+        play { dimension 'distribution' }
+    }
+    signingConfigs {
+        if (System.getenv('MEI_GITHUB_STORE_FILE')) {
+            stable {
+                storeFile file(System.getenv('MEI_GITHUB_STORE_FILE'))
+                storePassword System.getenv('MEI_GITHUB_STORE_PASSWORD')
+                keyAlias System.getenv('MEI_GITHUB_KEY_ALIAS')
+                keyPassword System.getenv('MEI_GITHUB_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes { release {
+        minifyEnabled false
+        if (System.getenv('MEI_GITHUB_STORE_FILE')) signingConfig signingConfigs.stable
+    } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildFeatures { buildConfig true }
+    lint { abortOnError true }
+}
+dependencies {
+    implementation project(':core')
+    implementation 'com.google.android.play:app-update:2.1.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+}
