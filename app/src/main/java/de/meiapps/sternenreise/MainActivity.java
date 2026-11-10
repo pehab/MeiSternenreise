@@ -78,7 +78,7 @@ public final class MainActivity extends Activity implements WorldRenderer.Events
     void startGame(boolean stereo){
         stopGame();vr=stereo;inGame=true;tracker.center();
         surface=new GLSurfaceView(this);surface.setEGLContextClientVersion(2);surface.setPreserveEGLContextOnPause(true);
-        renderer=new WorldRenderer(game,tracker,stereo,prefs.getFloat("lens",.16f),prefs.getFloat("ipd",.064f),this);surface.setRenderer(renderer);
+        renderer=new WorldRenderer(this,game,tracker,stereo,prefs.getFloat("lens",.16f),prefs.getFloat("ipd",.064f),this);surface.setRenderer(renderer);
         surface.setOnTouchListener((v,e)->{if(e.getAction()==MotionEvent.ACTION_DOWN){previousX=e.getX();previousY=e.getY();return true;}if(e.getAction()==MotionEvent.ACTION_MOVE){if(!vr&&renderer!=null)renderer.look((previousX-e.getX())*.12f,(previousY-e.getY())*.12f);previousX=e.getX();previousY=e.getY();return true;}if(e.getAction()==MotionEvent.ACTION_UP){v.performClick();return true;}return true;});
         setContentView(surface);immersive();if(stereo&&foreground)tracker.start();speak(game.hint());
     }

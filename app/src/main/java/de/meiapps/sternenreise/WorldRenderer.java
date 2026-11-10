@@ -1,237 +1,343 @@
 package de.meiapps.sternenreise;
 
-import android.graphics.*;
-import android.opengl.*;
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Typeface;
+import android.opengl.GLSurfaceView;
+import android.opengl.GLUtils;
 import android.opengl.Matrix;
 import android.os.SystemClock;
-import java.nio.*;
-import java.util.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 import static android.opengl.GLES20.*;
 
-/** Native 3D, parallel stereo cameras and per-eye radial lens correction. */
+/** Painted 360-degree environments with stereo foreground sprites and gaze interaction. */
 final class WorldRenderer implements GLSurfaceView.Renderer {
     interface Events { void activate(String id); void menu(); }
-    private record Target(String id,String label,float x,float y,float z,int color) { }
-    private record Solid(float x,float y,float z,float sx,float sy,float sz,int color,int shape) {
-        Solid(float x,float y,float z,float sx,float sy,float sz,int color,boolean gem) { this(x,y,z,sx,sy,sz,color,gem?1:0); }
-    }
+
+    // Exact reading order of the four-by-four transparent atlas (see docs/ART.md).
+    private static final int LUMI=0, KEY=1, CHEST=2, OPEN_CHEST=3;
+    private static final int POT=4, SPROUT=5, FLOWER=6, WATERING_CAN=7;
+    private static final int MACHINE=8, LIT_MACHINE=9, STAR=10, MOON=11, SUN=12, HOME=15;
+    private static final float LABEL_OFFSET=.48f;
+    private record Target(String id,String label,float x,float y,float z,boolean portal) { }
+    private record Sprite(int cell,float x,float y,float z,float halfWidth,float halfHeight,boolean selected) { }
+    private record Caption(int texture,float aspect) { }
+
+    private final Context context;
+    private final Adventure game;
     private final HeadTracker tracker;
     private final Events events;
-    private final Gaze gaze = new Gaze();
-    private final List<Solid> solids=new ArrayList<>();
+    private final boolean stereo;
+    private final float lens, eyeSeparation;
+    private final Gaze gaze=new Gaze();
     private final List<Target> targets=new ArrayList<>();
-    private final Map<String,Integer> textTextures=new HashMap<>();
-    private final Map<FloatBuffer,FloatBuffer> meshNormals=new IdentityHashMap<>();
-    private Adventure game;
-    private String message;
-    private boolean stereo;
+    private final List<Sprite> sprites=new ArrayList<>();
+    private final Map<String,Caption> captions=new HashMap<>();
+    private final FloatBuffer quad=buffer(-1,-1,0, 1,-1,0, -1,1,0, 1,1,0);
+    private final FloatBuffer wholeTexture=buffer(0,1, 1,1, 0,0, 1,0);
+    private final FloatBuffer[] atlasCoordinates=new FloatBuffer[16];
+    private final float[] head=new float[16], inverseHead=new float[16], projection=new float[16];
+    private final float[] view=new float[16], model=new float[16], combined=new float[16], mvp=new float[16];
     private volatile float yaw,pitch;
-    private float lens,eyeSeparation;
-    private int width,height,eyeWidth,program,distortionProgram,fbo,eyeTexture,depth,whiteTexture;
-    private int lastRoom=-1;
+    private String message;
+    private int width,height,eyeWidth,lastRoom=-1;
+    private int foregroundProgram,panoramaProgram,distortionProgram;
+    private int positionAttribute,uvAttribute,matrixUniform,colorUniform,samplerUniform;
+    private int panoramaPosition,panoramaHead,panoramaTangents,panoramaSampler;
+    private int distortionPosition,distortionLens,distortionFade,distortionSampler;
+    private int framebuffer,eyeTexture,panoramaTexture,atlasTexture,whiteTexture;
     private long fadeStart;
-    private final float[] head=new float[16],projection=new float[16],view=new float[16],model=new float[16],mvp=new float[16],tmp=new float[16];
-    private final FloatBuffer cube=buffer(new float[]{
-        -1,-1,1, 1,-1,1, 1,1,1, -1,-1,1, 1,1,1, -1,1,1,
-        1,-1,-1, -1,-1,-1, -1,1,-1, 1,-1,-1, -1,1,-1, 1,1,-1,
-        -1,-1,-1, -1,-1,1, -1,1,1, -1,-1,-1, -1,1,1, -1,1,-1,
-        1,-1,1, 1,-1,-1, 1,1,-1, 1,-1,1, 1,1,-1, 1,1,1,
-        -1,1,1, 1,1,1, 1,1,-1, -1,1,1, 1,1,-1, -1,1,-1,
-        -1,-1,-1, 1,-1,-1, 1,-1,1, -1,-1,-1, 1,-1,1, -1,-1,1});
-    private final FloatBuffer gem=buffer(new float[]{0,1,0,-1,0,0,0,0,1, 0,1,0,0,0,1,1,0,0, 0,1,0,1,0,0,0,0,-1, 0,1,0,0,0,-1,-1,0,0, 0,-1,0,0,0,1,-1,0,0, 0,-1,0,1,0,0,0,0,1, 0,-1,0,0,0,-1,1,0,0, 0,-1,0,-1,0,0,0,0,-1});
-    private final FloatBuffer star=symbolMesh(0),moon=symbolMesh(1),sun=symbolMesh(2);
-    private final FloatBuffer quad=buffer(new float[]{-1,-1,0,1,-1,0,-1,1,0,1,1,0});
-    private final FloatBuffer uv=buffer(new float[]{0,1,1,1,0,0,1,0});
-    WorldRenderer(Adventure game,HeadTracker tracker,boolean stereo,float lens,float eyeSeparation,Events events) {
-        this.game=game;this.tracker=tracker;this.stereo=stereo;this.lens=lens;this.eyeSeparation=eyeSeparation;this.events=events;message=game.hint();
+
+    WorldRenderer(Context context,Adventure game,HeadTracker tracker,boolean stereo,
+                  float lens,float eyeSeparation,Events events) {
+        this.context=context;this.game=game;this.tracker=tracker;this.stereo=stereo;
+        this.lens=lens;this.eyeSeparation=eyeSeparation;this.events=events;message=game.hint();
+        for(int cell=0;cell<16;cell++) {
+            // Slight inset keeps bilinear filtering inside each transparent atlas cell.
+            float left=(cell%4)/4f+.001f,right=(cell%4+1)/4f-.001f;
+            float top=(cell/4)/4f+.001f,bottom=(cell/4+1)/4f-.001f;
+            atlasCoordinates[cell]=buffer(left,bottom,right,bottom,left,top,right,top);
+        }
     }
-    void look(float dx,float dy) { yaw+=dx; pitch=Math.max(-75,Math.min(75,pitch+dy)); }
+    void look(float dx,float dy) { yaw+=dx;pitch=Math.max(-75,Math.min(75,pitch+dy)); }
     void resetGaze() { gaze.reset(); }
-    void refresh(String text) { message=text; rebuild(); }
-    private static FloatBuffer buffer(float[] values) { FloatBuffer b=ByteBuffer.allocateDirect(values.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer();b.put(values).position(0);return b; }
-    @Override public void onSurfaceCreated(GL10 unused,EGLConfig config) {
-        program=link("attribute vec3 a; attribute vec3 n; attribute vec2 t; uniform mat4 m; uniform float lit; varying vec2 uv; varying float light; void main(){gl_Position=m*vec4(a,1.);uv=t;light=mix(1.,.48+.52*max(0.,dot(n,normalize(vec3(-.3,.8,.5)))),lit);}",
-            "precision mediump float; uniform vec4 c; uniform sampler2D s; uniform float textured; varying vec2 uv;varying float light;void main(){vec4 base=mix(c,texture2D(s,uv)*c,textured);gl_FragColor=vec4(base.rgb*light,base.a);}");
-        distortionProgram=link("attribute vec3 a; varying vec2 p;void main(){gl_Position=vec4(a,1.);p=a.xy;}",
-            "precision mediump float;varying vec2 p;uniform sampler2D s;uniform float k;uniform float fade;void main(){float r=dot(p,p);vec2 q=p*(1.+k*r);vec2 uv=(q+1.)*.5;if(abs(q.x)>1.||abs(q.y)>1.)gl_FragColor=vec4(0.,0.,0.,1.);else gl_FragColor=vec4(texture2D(s,uv).rgb*fade,1.);}");
-        textTextures.clear();eyeTexture=0;fbo=0;depth=0;
-        int[] white=new int[1];glGenTextures(1,white,0);whiteTexture=white[0];glBindTexture(GL_TEXTURE_2D,whiteTexture);
-        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
-        ByteBuffer pixel=ByteBuffer.allocateDirect(4);pixel.put(new byte[]{-1,-1,-1,-1}).position(0);
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,1,1,0,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
-        glEnable(GL_DEPTH_TEST); glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
-        rebuild();
+    void refresh(String text) { message=text;rebuildScene(); }
+    private static FloatBuffer buffer(float... values) {
+        FloatBuffer result=ByteBuffer.allocateDirect(values.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer();
+        result.put(values).position(0);return result;
     }
-    @Override public void onSurfaceChanged(GL10 unused,int w,int h) {width=w;height=h;eyeWidth=stereo?w/2:w;allocateEye();}
+
+    @Override public void onSurfaceCreated(GL10 unused,EGLConfig config) {
+        foregroundProgram=link(
+            "attribute vec3 position;attribute vec2 texCoord;uniform mat4 matrix;varying vec2 uv;void main(){gl_Position=matrix*vec4(position,1.);uv=texCoord;}",
+            "precision mediump float;varying vec2 uv;uniform sampler2D image;uniform vec4 color;void main(){vec4 pixel=texture2D(image,uv)*color;if(pixel.a<.01)discard;gl_FragColor=pixel;}");
+        panoramaProgram=link(
+            "attribute vec3 position;uniform mat4 cameraToWorld;uniform vec2 tangents;varying vec3 direction;void main(){gl_Position=vec4(position,1.);direction=(cameraToWorld*vec4(position.x*tangents.x,position.y*tangents.y,-1.,0.)).xyz;}",
+            "precision mediump float;varying vec3 direction;uniform sampler2D image;void main(){vec3 ray=normalize(direction);float u=fract(.5+atan(ray.x,-ray.z)/6.283185307);float v=.5-asin(clamp(ray.y,-1.,1.))/3.141592654;gl_FragColor=texture2D(image,vec2(u,v));}");
+        distortionProgram=link(
+            "attribute vec3 position;varying vec2 point;void main(){gl_Position=vec4(position,1.);point=position.xy;}",
+            "precision mediump float;varying vec2 point;uniform sampler2D image;uniform float lens;uniform float fade;void main(){vec2 source=point*(1.+lens*dot(point,point));if(abs(source.x)>1.||abs(source.y)>1.)gl_FragColor=vec4(0.,0.,0.,1.);else gl_FragColor=vec4(texture2D(image,(source+1.)*.5).rgb*fade,1.);}");
+        positionAttribute=glGetAttribLocation(foregroundProgram,"position");
+        uvAttribute=glGetAttribLocation(foregroundProgram,"texCoord");
+        matrixUniform=glGetUniformLocation(foregroundProgram,"matrix");
+        colorUniform=glGetUniformLocation(foregroundProgram,"color");
+        samplerUniform=glGetUniformLocation(foregroundProgram,"image");
+        panoramaPosition=glGetAttribLocation(panoramaProgram,"position");
+        panoramaHead=glGetUniformLocation(panoramaProgram,"cameraToWorld");
+        panoramaTangents=glGetUniformLocation(panoramaProgram,"tangents");
+        panoramaSampler=glGetUniformLocation(panoramaProgram,"image");
+        distortionPosition=glGetAttribLocation(distortionProgram,"position");
+        distortionLens=glGetUniformLocation(distortionProgram,"lens");
+        distortionFade=glGetUniformLocation(distortionProgram,"fade");
+        distortionSampler=glGetUniformLocation(distortionProgram,"image");
+        captions.clear();framebuffer=0;eyeTexture=0;panoramaTexture=0;lastRoom=-1;
+        atlasTexture=loadAsset("sprites.webp");
+        Bitmap white=Bitmap.createBitmap(1,1,Bitmap.Config.ARGB_8888);white.eraseColor(Color.WHITE);
+        whiteTexture=upload(white);white.recycle();
+        // Android bitmaps are premultiplied; preserve the soft painted alpha edges.
+        glEnable(GL_BLEND);glBlendFunc(GL_ONE,GL_ONE_MINUS_SRC_ALPHA);glDisable(GL_DEPTH_TEST);
+        rebuildScene();
+    }
+    @Override public void onSurfaceChanged(GL10 unused,int width,int height) {
+        this.width=width;this.height=height;eyeWidth=stereo?width/2:width;allocateEye();
+    }
     private void allocateEye() {
-        if (eyeTexture!=0) {glDeleteTextures(1,new int[]{eyeTexture},0);glDeleteFramebuffers(1,new int[]{fbo},0);glDeleteRenderbuffers(1,new int[]{depth},0);}
+        if(eyeTexture!=0) {glDeleteTextures(1,new int[]{eyeTexture},0);glDeleteFramebuffers(1,new int[]{framebuffer},0);}
         int[] id=new int[1];glGenTextures(1,id,0);eyeTexture=id[0];glBindTexture(GL_TEXTURE_2D,eyeTexture);
-        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,eyeWidth,height,0,GL_RGBA,GL_UNSIGNED_BYTE,null);
-        glGenRenderbuffers(1,id,0);depth=id[0];glBindRenderbuffer(GL_RENDERBUFFER,depth);glRenderbufferStorage(GL_RENDERBUFFER,GL_DEPTH_COMPONENT16,eyeWidth,height);
-        glGenFramebuffers(1,id,0);fbo=id[0];glBindFramebuffer(GL_FRAMEBUFFER,fbo);glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,eyeTexture,0);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER,GL_DEPTH_ATTACHMENT,GL_RENDERBUFFER,depth);
-        if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE) throw new IllegalStateException("Eye framebuffer unavailable");
+        textureParameters();glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,eyeWidth,height,0,GL_RGBA,GL_UNSIGNED_BYTE,null);
+        glGenFramebuffers(1,id,0);framebuffer=id[0];glBindFramebuffer(GL_FRAMEBUFFER,framebuffer);
+        glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,eyeTexture,0);
+        if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE)throw new IllegalStateException("Eye framebuffer unavailable");
         glBindFramebuffer(GL_FRAMEBUFFER,0);
     }
+
     @Override public void onDrawFrame(GL10 unused) {
         if(width==0||height==0)return;
         long now=SystemClock.uptimeMillis();
-        if(stereo) tracker.copyView(head); else {Matrix.setIdentityM(head,0);Matrix.rotateM(head,0,pitch,1,0,0);Matrix.rotateM(head,0,yaw,0,1,0);}
-        float[] forward={-head[2],-head[6],-head[10]};
-        Target focused=null;double best=-1;
-        for(Target t:targets) if(Gaze.hits(forward,t.x,t.y,t.z,.145f)||Gaze.hits(forward,t.x,t.y+.48f,t.z,.11f)) {
-            double objectScore=(forward[0]*t.x+forward[1]*t.y+forward[2]*t.z)/Math.sqrt(t.x*t.x+t.y*t.y+t.z*t.z);
-            double labelScore=(forward[0]*t.x+forward[1]*(t.y+.48f)+forward[2]*t.z)/Math.sqrt(t.x*t.x+(t.y+.48f)*(t.y+.48f)+t.z*t.z);
-            double score=Math.max(objectScore,labelScore);
-            if(score>best){best=score;focused=t;}
-        }
-        if(now-fadeStart>650 && gaze.update(focused==null?null:focused.id,now)) {
-            String id=focused.id;
-            // Callback runs on UI; state mutations return through queueEvent.
-            events.activate(id);
-        }
+        if(stereo)tracker.copyView(head);
+        else {Matrix.setIdentityM(head,0);Matrix.rotateM(head,0,pitch,1,0,0);Matrix.rotateM(head,0,yaw,0,1,0);}
+        Matrix.transposeM(inverseHead,0,head,0);
+        Target focused=findTarget(-head[2],-head[6],-head[10]);
+        if(now-fadeStart>650 && gaze.update(focused==null?null:focused.id,now))events.activate(focused.id);
         float progress=gaze.progress(now);
+        float fieldOfView=stereo?82:65;
+        float tangentY=(float)Math.tan(Math.toRadians(fieldOfView/2));
         for(int eye=0;eye<(stereo?2:1);eye++) {
-            glBindFramebuffer(GL_FRAMEBUFFER,fbo);glViewport(0,0,eyeWidth,height);glEnable(GL_DEPTH_TEST);
-            glClearColor(.035f,.06f,.12f,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
-            Matrix.perspectiveM(projection,0,stereo?82:65,(float)eyeWidth/height,.08f,40);
-            Matrix.setIdentityM(view,0);if(stereo)Matrix.translateM(view,0,eye==0?eyeSeparation/2:-eyeSeparation/2,0,0);
-            Matrix.multiplyMM(tmp,0,view,0,head,0);System.arraycopy(tmp,0,view,0,16);
-            for(Solid s:solids) drawSolid(s);
-            for(Target t:targets) drawLabel(t.label,t.x,t.y+.48f,t.z,.55f,.13f,Color.WHITE,false);
-            // Head-locked panels sit at a comfortable finite distance in both eyes.
-            glDisable(GL_DEPTH_TEST);
-            Matrix.setIdentityM(view,0);if(stereo)Matrix.translateM(view,0,eye==0?eyeSeparation/2:-eyeSeparation/2,0,0);
-            drawLabel(game.title(),0,.98f,-2.3f,1,.18f,0xfff9d78a,true);
-            drawLabel(message,0,-.83f,-2.3f,1.05f,.26f,Color.WHITE,true);
-            glDisable(GL_DEPTH_TEST);
-            drawBox(0,0,-2.3f,.008f,.008f,.001f,focused==null?Color.WHITE:0xff7ce9d9,false);
-            if(focused!=null) {
-                for(int i=0;i<32;i++) {
-                    double angle=i*Math.PI*2/32;
-                    drawBox((float)Math.sin(angle)*.055f,(float)Math.cos(angle)*.055f,-2.3f,.005f,.005f,.001f,i<progress*32?0xfff9d78a:0xff52657e,false);
-                }
+            glBindFramebuffer(GL_FRAMEBUFFER,framebuffer);glViewport(0,0,eyeWidth,height);
+            glClearColor(.03f,.06f,.1f,1);glClear(GL_COLOR_BUFFER_BIT);
+            drawPanorama(tangentY);
+            Matrix.perspectiveM(projection,0,fieldOfView,(float)eyeWidth/height,.08f,40);
+            Matrix.setIdentityM(view,0);
+            if(stereo)Matrix.translateM(view,0,eye==0?eyeSeparation/2:-eyeSeparation/2,0,0);
+            Matrix.multiplyMM(combined,0,view,0,head,0);System.arraycopy(combined,0,view,0,16);
+            for(Sprite sprite:sprites)drawSprite(sprite,now);
+            if(game.finished() && game.room()==Adventure.Room.OBSERVATORY)drawCelebration(now);
+            for(Target target:targets) {
+                // Painted objects remain unobscured; names appear while examining them.
+                if(target.portal || (focused!=null && focused.id.equals(target.id)))
+                    drawCaption(target.label,target.x,target.y+LABEL_OFFSET,target.z,.52f,"label",false);
             }
-            glBindFramebuffer(GL_FRAMEBUFFER,0);glViewport(stereo?eye*eyeWidth:0,0,eyeWidth,height);glDisable(GL_DEPTH_TEST);
-            glUseProgram(distortionProgram);int a=glGetAttribLocation(distortionProgram,"a");glEnableVertexAttribArray(a);quad.position(0);glVertexAttribPointer(a,3,GL_FLOAT,false,0,quad);
-            glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,eyeTexture);glUniform1i(glGetUniformLocation(distortionProgram,"s"),0);
-            glUniform1f(glGetUniformLocation(distortionProgram,"k"),stereo?lens:0);
-            float fade=Math.min(1,(now-fadeStart)/450f);glUniform1f(glGetUniformLocation(distortionProgram,"fade"),Math.max(0,fade));
-            glDrawArrays(GL_TRIANGLE_STRIP,0,4);glDisableVertexAttribArray(a);
+            Matrix.setIdentityM(view,0);
+            if(stereo)Matrix.translateM(view,0,eye==0?eyeSeparation/2:-eyeSeparation/2,0,0);
+            drawCaption(game.finished()?"Geschafft! · Sternenlicht gerettet":game.title(),0,1.03f,-2.3f,.92f,"title",true);
+            drawCaption(message,0,-.86f,-2.3f,1.03f,"message",true);
+            drawReticle(focused!=null,progress);
+            glBindFramebuffer(GL_FRAMEBUFFER,0);glViewport(stereo?eye*eyeWidth:0,0,eyeWidth,height);
+            glUseProgram(distortionProgram);position(distortionPosition);
+            bindTexture(eyeTexture,distortionSampler);
+            glUniform1f(distortionLens,stereo?lens:0);
+            glUniform1f(distortionFade,Math.max(0,Math.min(1,(now-fadeStart)/450f)));
+            glDrawArrays(GL_TRIANGLE_STRIP,0,4);glDisableVertexAttribArray(distortionPosition);
         }
     }
-    private void rebuild() {
-        for(int texture:textTextures.values())glDeleteTextures(1,new int[]{texture},0);textTextures.clear();
-        solids.clear();targets.clear();
-        if(lastRoom!=game.room().ordinal()) {fadeStart=SystemClock.uptimeMillis();lastRoom=game.room().ordinal();yaw=0;pitch=0;tracker.center();gaze.reset();}
-        int wall=game.room()==Adventure.Room.GARDEN?0xff284d58:0xff253953;
-        add(0,-1.75f,0,6,.1f,6,0xff665340);add(0,3.4f,0,6,.1f,6,0xff15233c);
-        add(0,.8f,-5,6,2.5f,.12f,wall);add(-5,.8f,0,.12f,2.5f,5,wall);add(5,.8f,0,.12f,2.5f,5,wall);add(0,.8f,5,6,2.5f,.12f,wall);
-        for(int i=-4;i<=4;i++){add(i,-1.63f,0,.018f,.012f,5,0xffa7895e);add(i,.8f,-4.8f,.055f,2.4f,.05f,0xff977351);}
-        // Tiny stars and windows around the whole room reward looking around.
-        Random random=new Random(77+game.room().ordinal());
-        for(int i=0;i<45;i++){float x=random.nextFloat()*8-4,z=random.nextFloat()*8-4;add(x,2.7f+random.nextFloat()*.4f,z,.025f,.025f,.025f,0xffffdc94);}
-        for(int side:new int[]{-1,1}) {add(side*4.82f,.7f,1,.04f,1.2f,1,0xff0e203b);add(side*4.75f,.7f,1,.06f,.045f,1,0xffc69b61);add(side*4.75f,.7f,1,.06f,1.2f,.045f,0xffc69b61);}
-        robot(-2.3f,-.4f,-2.5f);
-        target("hint","Lumi · Hilfe",-2.3f,.15f,-2.5f,0xff7ce9d9);
-        target("menu","Pause",0,-1.0f,2.5f,0xffd3c3ab);add(0,-1.15f,2.5f,.45f,.13f,.13f,0xffd3c3ab);
+    private Target findTarget(float x,float y,float z) {
+        Target found=null;double best=-1;float[] direction={x,y,z};
+        for(Target target:targets) {
+            float radius=target.portal?.18f:.145f;
+            if(!Gaze.hits(direction,target.x,target.y,target.z,radius)
+                && !Gaze.hits(direction,target.x,target.y+LABEL_OFFSET,target.z,.11f))continue;
+            double centerScore=alignment(x,y,z,target.x,target.y,target.z);
+            double labelScore=alignment(x,y,z,target.x,target.y+LABEL_OFFSET,target.z);
+            double score=Math.max(centerScore,labelScore);
+            if(score>best){found=target;best=score;}
+        }
+        return found;
+    }
+    private static double alignment(float x,float y,float z,float tx,float ty,float tz) {
+        return (x*tx+y*ty+z*tz)/Math.sqrt(tx*tx+ty*ty+tz*tz);
+    }
+    private void drawPanorama(float tangentY) {
+        glUseProgram(panoramaProgram);position(panoramaPosition);
+        glUniformMatrix4fv(panoramaHead,1,false,inverseHead,0);
+        glUniform2f(panoramaTangents,tangentY*eyeWidth/height,tangentY);
+        bindTexture(panoramaTexture,panoramaSampler);glDrawArrays(GL_TRIANGLE_STRIP,0,4);
+        glDisableVertexAttribArray(panoramaPosition);
+    }
+    private void drawSprite(Sprite sprite,long now) {
+        Matrix.setIdentityM(model,0);Matrix.translateM(model,0,sprite.x,sprite.y,sprite.z);
+        Matrix.rotateM(model,0,(float)-Math.toDegrees(Math.atan2(sprite.x,-sprite.z)),0,1,0);
+        Matrix.scaleM(model,0,sprite.halfWidth,sprite.halfHeight,1);
+        draw(atlasTexture,atlasCoordinates[sprite.cell],sprite.selected?0xffffeab8:Color.WHITE);
+    }
+    private void drawCelebration(long now) {
+        for(int index=0;index<12;index++) {
+            double angle=index*Math.PI*2/12;
+            float x=(float)Math.sin(angle)*4,z=-(float)Math.cos(angle)*4;
+            float y=1.25f+(float)Math.sin(now/1200.0+index)*.08f;
+            drawSprite(new Sprite(STAR,x,y,z,.14f,.14f,false),now);
+        }
+    }
+    private void drawReticle(boolean focused,float progress) {
+        flatQuad(0,0,-2.3f,.008f,.008f,focused?0xff96f6de:Color.WHITE);
+        if(!focused)return;
+        for(int index=0;index<32;index++) {
+            double angle=index*Math.PI*2/32;
+            flatQuad((float)Math.sin(angle)*.055f,(float)Math.cos(angle)*.055f,-2.3f,.0045f,.0045f,
+                index<progress*32?0xffffd886:0xff55778c);
+        }
+    }
+    private void flatQuad(float x,float y,float z,float halfWidth,float halfHeight,int color) {
+        Matrix.setIdentityM(model,0);Matrix.translateM(model,0,x,y,z);Matrix.scaleM(model,0,halfWidth,halfHeight,1);
+        draw(whiteTexture,wholeTexture,color);
+    }
+    private void drawCaption(String text,float x,float y,float z,float halfWidth,String style,boolean hud) {
+        String key=style+":"+text;Caption caption=captions.get(key);
+        if(caption==null){caption=makeCaption(text,style);captions.put(key,caption);}
+        Matrix.setIdentityM(model,0);Matrix.translateM(model,0,x,y,z);
+        if(!hud)Matrix.rotateM(model,0,(float)-Math.toDegrees(Math.atan2(x,-z)),0,1,0);
+        Matrix.scaleM(model,0,halfWidth,halfWidth/caption.aspect,1);draw(caption.texture,wholeTexture,Color.WHITE);
+    }
+    private void draw(int texture,FloatBuffer coordinates,int color) {
+        glUseProgram(foregroundProgram);
+        Matrix.multiplyMM(combined,0,view,0,model,0);Matrix.multiplyMM(mvp,0,projection,0,combined,0);
+        glUniformMatrix4fv(matrixUniform,1,false,mvp,0);
+        glUniform4f(colorUniform,Color.red(color)/255f,Color.green(color)/255f,Color.blue(color)/255f,1);
+        position(positionAttribute);glEnableVertexAttribArray(uvAttribute);coordinates.position(0);
+        glVertexAttribPointer(uvAttribute,2,GL_FLOAT,false,0,coordinates);bindTexture(texture,samplerUniform);
+        glDrawArrays(GL_TRIANGLE_STRIP,0,4);glDisableVertexAttribArray(positionAttribute);glDisableVertexAttribArray(uvAttribute);
+    }
+    private void position(int attribute) {
+        glEnableVertexAttribArray(attribute);quad.position(0);glVertexAttribPointer(attribute,3,GL_FLOAT,false,0,quad);
+    }
+    private static void bindTexture(int texture,int sampler) {
+        glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,texture);glUniform1i(sampler,0);
+    }
+
+    private void rebuildScene() {
+        for(Caption caption:captions.values())glDeleteTextures(1,new int[]{caption.texture},0);
+        captions.clear();sprites.clear();targets.clear();
+        if(lastRoom!=game.room().ordinal()) {
+            if(panoramaTexture!=0)glDeleteTextures(1,new int[]{panoramaTexture},0);
+            panoramaTexture=loadAsset(switch(game.room()) {
+                case WORKSHOP -> "workshop.webp";case GARDEN -> "garden.webp";case OBSERVATORY -> "observatory.webp";
+            });
+            lastRoom=game.room().ordinal();fadeStart=SystemClock.uptimeMillis();yaw=0;pitch=0;tracker.center();gaze.reset();
+        }
+        item("hint","Lumi · Hilfe",LUMI,-35,-13,3.5f,.55f,.74f,false);
+        item("menu","Pause · Zum Menü",HOME,180,-25,3,.2f,.2f,true);
         switch(game.room()) {
             case WORKSHOP -> {
-                add(-1.5f,-.8f,-3.7f,1.2f,.12f,.55f,0xffac8054);add(-1.5f,.25f,-3.85f,1.2f,.08f,.4f,0xffac8054);
-                for(int i=0;i<6;i++)add(-2.3f+i*.29f,-.35f,-3.8f,.1f,.4f,.18f,new int[]{0xff68c8bc,0xffeeae73,0xffbc9cd7}[i%3]);
-                if(!game.hasKey()){target("key","Schlüssel",-1.2f,.6f,-3.4f,0xffffd477);add(-1.2f,.6f,-3.4f,.25f,.06f,.06f,0xffffd477);add(-1.4f,.6f,-3.4f,.08f,.16f,.06f,0xffffd477);}
-                target("chest",game.hasSeed()?"Leere Truhe":"Kleine Truhe",.8f,-.45f,-2.6f,0xffdda65d);add(.8f,-.8f,-2.6f,.55f,.4f,.4f,0xffa26c46);add(.8f,-.4f,-2.6f,.57f,.08f,.42f,0xffe8b36b);
-                door("garden","Mondgarten",3,.1f,-3.9f,0xff60c7ad);
+                if(!game.hasKey())item("key","Goldener Schlüssel",KEY,-12,5,3.5f,.27f,.4f,false);
+                item("chest",game.hasSeed()?"Geöffnete Truhe":"Kleine Truhe",game.hasSeed()?OPEN_CHEST:CHEST,20,-18,3.5f,.64f,.48f,false);
+                portal("garden","In den Mondgarten",72,-3);
             }
             case GARDEN -> {
-                add(0,-1.5f,-3,2.1f,.1f,1.2f,0xff486b53);
-                target("pot","Mondensamen",-.8f,-.5f,-2.7f,0xffe9a878);add(-.8f,-1.1f,-2.7f,.4f,.45f,.4f,0xffc4815c);
-                target("water","Gießkanne",1.5f,-.5f,-2.6f,0xff7ccadd);add(1.5f,-.85f,-2.6f,.3f,.3f,.25f,0xff7ccadd);add(1.1f,-.65f,-2.6f,.3f,.06f,.06f,0xff7ccadd);
-                if(game.watered()){add(-.8f,-.35f,-2.7f,.055f,.65f,.055f,0xff8dd8a0);target("flower",game.hasCrystal()?"Mondblume":"Sternenkristall",-.8f,.5f,-2.7f,0xff8ee5ff);solids.add(new Solid(-.8f,.5f,-2.7f,.34f,.45f,.34f,0xff8ee5ff,true));}
-                door("back","Werkstatt",-3,.1f,-3.9f,0xffd6a46c);door("observatory","Sternwarte",3,.1f,-3.9f,0xff8baff3);
+                int flowerSprite=game.watered()?FLOWER:game.planted()?SPROUT:POT;
+                item("pot",game.watered()?"Mondblume":game.planted()?"Kleiner Sprössling":"Mondensamen einpflanzen",
+                    flowerSprite,-15,game.watered()?-8:-20,3.5f,.55f,game.watered()?.85f:.48f,false);
+                if(game.watered())target("flower",game.hasCrystal()?"Mondblume untersuchen":"Sternenkristall nehmen",-15,4,3.5f,false);
+                item("water","Gießkanne",WATERING_CAN,22,-20,3.5f,.53f,.52f,false);
+                portal("back","Zurück ins Haus",-131,-4);
+                portal("observatory","Zur Sternwarte",126,-2);
             }
             case OBSERVATORY -> {
-                add(0,-1.35f,-3.3f,2,.2f,.7f,0xff8f7198);
-                String[] ids={"star","moon","sun"},labels={"Stern","Mond","Sonne"};int[] colors={0xffffdc81,0xffb8c9ff,0xffffac76};
-                for(int i=0;i<3;i++){float x=(i-1)*1.25f;target(ids[i],labels[i],x,-.35f,-3,colors[i]);solids.add(new Solid(x,-.35f,-3,.3f,.35f,.15f,game.symbols()>i?0xff85f3ca:colors[i],i+2));}
-                target("machine",game.finished()?"Sternenlicht!":"Sternenmaschine",2.6f,.4f,-2.2f,0xffffd477);
-                add(2.6f,-.9f,-2.2f,.55f,.65f,.45f,0xff667ba8);solids.add(new Solid(2.6f,.4f,-2.2f,.5f,.65f,.5f,game.finished()?0xffffedaa:0xff7999c5,true));
-                if(game.finished())for(int i=0;i<20;i++){double a=i*Math.PI*2/20;solids.add(new Solid((float)Math.sin(a)*3.8f,1.7f,(float)Math.cos(a)*3.8f,.15f,.25f,.15f,0xffffdf85,true));}
-                door("back","Mondgarten",-3,.1f,-3.9f,0xff60c7ad);
-        }
-        }
-    }
-    private void target(String id,String label,float x,float y,float z,int color){targets.add(new Target(id,label,x,y,z,color));}
-    private void add(float x,float y,float z,float sx,float sy,float sz,int c){solids.add(new Solid(x,y,z,sx,sy,sz,c,false));}
-    private void robot(float x,float y,float z){add(x,y-.4f,z,.3f,.35f,.22f,0xff62b9be);add(x,y+.15f,z,.4f,.28f,.25f,0xffe1d0a6);add(x-.16f,y+.17f,z+.26f,.065f,.065f,.02f,0xff234352);add(x+.16f,y+.17f,z+.26f,.065f,.065f,.02f,0xff234352);add(x,y+.55f,z,.025f,.12f,.025f,0xffffdc81);}
-    private void door(String id,String label,float x,float y,float z,int color){target(id,label,x,y,z,color);add(x,y-.3f,z,.66f,1.2f,.12f,color);add(x+.42f,y-.3f,z+.15f,.07f,.07f,.05f,0xffffda86);}
-    private void drawSolid(Solid s){
-        if(s.shape<2){drawBox(s.x,s.y,s.z,s.sx,s.sy,s.sz,s.color,s.shape==1);return;}
-        Matrix.setIdentityM(model,0);Matrix.translateM(model,0,s.x,s.y,s.z);Matrix.scaleM(model,0,s.sx,s.sy,s.sz);
-        FloatBuffer mesh=s.shape==2?star:s.shape==3?moon:sun;draw(mesh,mesh.capacity()/3,s.color,0,false);
-    }
-    private void drawBox(float x,float y,float z,float sx,float sy,float sz,int c,boolean isGem){
-        Matrix.setIdentityM(model,0);Matrix.translateM(model,0,x,y,z);Matrix.scaleM(model,0,sx,sy,sz);
-        if(isGem)Matrix.rotateM(model,0,(SystemClock.uptimeMillis()%18000)/50f,0,1,0);
-        draw(isGem?gem:cube,isGem?24:36,c,0,false);
-    }
-    private void drawLabel(String text,float x,float y,float z,float sx,float sy,int color,boolean hud) {
-        Integer texture=textTextures.get(text);if(texture==null){texture=makeText(text);textTextures.put(text,texture);}
-        Matrix.setIdentityM(model,0);Matrix.translateM(model,0,x,y,z);
-        if(!hud){double angle=Math.atan2(x,z)+Math.PI;Matrix.rotateM(model,0,(float)Math.toDegrees(angle),0,1,0);}
-        Matrix.scaleM(model,0,sx,sy,1);draw(quad,4,color,texture,true);
-    }
-    private void draw(FloatBuffer vertices,int count,int color,int texture,boolean strip){
-        glUseProgram(program);Matrix.multiplyMM(tmp,0,view,0,model,0);Matrix.multiplyMM(mvp,0,projection,0,tmp,0);
-        glUniformMatrix4fv(glGetUniformLocation(program,"m"),1,false,mvp,0);
-        glUniform4f(glGetUniformLocation(program,"c"),Color.red(color)/255f,Color.green(color)/255f,Color.blue(color)/255f,1);
-        int a=glGetAttribLocation(program,"a"),t=glGetAttribLocation(program,"t"),normal=glGetAttribLocation(program,"n");
-        glUniform1f(glGetUniformLocation(program,"lit"),texture==0&&!strip?1:0);
-        if(!strip){FloatBuffer normals=meshNormals.get(vertices);if(normals==null){normals=normals(vertices);meshNormals.put(vertices,normals);}glEnableVertexAttribArray(normal);normals.position(0);glVertexAttribPointer(normal,3,GL_FLOAT,false,0,normals);}else{glDisableVertexAttribArray(normal);glVertexAttrib3f(normal,0,0,1);}glEnableVertexAttribArray(a);vertices.position(0);glVertexAttribPointer(a,3,GL_FLOAT,false,0,vertices);
-        glUniform1f(glGetUniformLocation(program,"textured"),texture==0?0:1);
-        glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,texture==0?whiteTexture:texture);glUniform1i(glGetUniformLocation(program,"s"),0);
-        if(texture!=0){glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,texture);glUniform1i(glGetUniformLocation(program,"s"),0);glEnableVertexAttribArray(t);uv.position(0);glVertexAttribPointer(t,2,GL_FLOAT,false,0,uv);}
-        glDrawArrays(strip?GL_TRIANGLE_STRIP:GL_TRIANGLES,0,count);glDisableVertexAttribArray(a);glDisableVertexAttribArray(normal);if(texture!=0)glDisableVertexAttribArray(t);
-    }
-    private int makeText(String text){
-        Bitmap b=Bitmap.createBitmap(1024,256,Bitmap.Config.ARGB_8888);Canvas c=new Canvas(b);Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setColor(0xe619263d);c.drawRoundRect(2,2,1022,254,28,28,p);p.setColor(Color.WHITE);p.setTextSize(text.length()>55?34:44);p.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));p.setTextAlign(Paint.Align.CENTER);
-        List<String> lines=new ArrayList<>();String line="";for(String word:text.split(" ")){String next=line.isEmpty()?word:line+" "+word;if(p.measureText(next)>940){lines.add(line);line=word;}else line=next;}lines.add(line);
-        float y=128-(lines.size()-1)*24;for(String l:lines){c.drawText(l,512,y+14,p);y+=48;}
-        int[] id=new int[1];glGenTextures(1,id,0);glBindTexture(GL_TEXTURE_2D,id[0]);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);GLUtils.texImage2D(GL_TEXTURE_2D,0,b,0);b.recycle();return id[0];
-    }
-    private static FloatBuffer normals(FloatBuffer vertices){
-        float[] data=new float[vertices.capacity()];
-        for(int i=0;i+8<data.length;i+=9){
-            float ax=vertices.get(i+3)-vertices.get(i),ay=vertices.get(i+4)-vertices.get(i+1),az=vertices.get(i+5)-vertices.get(i+2);
-            float bx=vertices.get(i+6)-vertices.get(i),by=vertices.get(i+7)-vertices.get(i+1),bz=vertices.get(i+8)-vertices.get(i+2);
-            float nx=ay*bz-az*by,ny=az*bx-ax*bz,nz=ax*by-ay*bx,length=(float)Math.sqrt(nx*nx+ny*ny+nz*nz);
-            if(length==0)length=1;for(int v=0;v<3;v++){data[i+v*3]=nx/length;data[i+v*3+1]=ny/length;data[i+v*3+2]=nz/length;}
-        }
-        return buffer(data);
-    }
-    private static FloatBuffer symbolMesh(int kind){
-        java.util.ArrayList<Float> vertices=new java.util.ArrayList<>();
-        int count=kind==0?10:kind==1?48:48;
-        for(int i=0;i<count;i++){
-            double a=Math.PI/2+i*2*Math.PI/count,b=Math.PI/2+(i+1)*2*Math.PI/count;
-            if(kind==1){
-                // Outer left arc and a shifted, inset arc meet at both crescent tips.
-                a=Math.PI/3+i*(4*Math.PI/3)/count;b=Math.PI/3+(i+1)*(4*Math.PI/3)/count;
-                float ox=(float)Math.cos(a),oy=(float)Math.sin(a),px=(float)Math.cos(b),py=(float)Math.sin(b);
-                float ix=.5f+.72f*(ox-.5f),iy=oy,jx=.5f+.72f*(px-.5f),jy=py;
-                addTriangle(vertices,ox,oy,px,py,ix,iy);addTriangle(vertices,px,py,jx,jy,ix,iy);
-            }else{
-                float ra=kind==0?(i%2==0?1:.43f):(i%4==0?1:.73f),rb=kind==0?((i+1)%2==0?1:.43f):((i+1)%4==0?1:.73f);
-                addTriangle(vertices,0,0,(float)Math.cos(a)*ra,(float)Math.sin(a)*ra,(float)Math.cos(b)*rb,(float)Math.sin(b)*rb);
+                String[] ids={"star","moon","sun"},names={"Stern","Mond","Sonne"};int[] cells={STAR,MOON,SUN};
+                for(int index=0;index<3;index++)item(ids[index],names[index],cells[index],(index-1)*16,-13,3.2f,.28f,.28f,game.symbols()>index);
+                item("machine",game.finished()?"Das Sternenlicht leuchtet!":"Sternenmaschine",game.finished()?LIT_MACHINE:MACHINE,
+                    106,-3,4,.75f,1,false);
+                portal("back","Zurück in den Garten",-156,-4);
             }
         }
-        float[] data=new float[vertices.size()];for(int i=0;i<data.length;i++)data[i]=vertices.get(i);return buffer(data);
+        if(game.finished())item("menu","Abenteuer geschafft · Zum Menü",HOME,0,-33,2.8f,.19f,.19f,true);
+        sprites.sort(Comparator.comparingDouble((Sprite sprite)->sprite.x*sprite.x+sprite.y*sprite.y+sprite.z*sprite.z).reversed());
     }
-    private static void addTriangle(java.util.List<Float> data,float ax,float ay,float bx,float by,float cx,float cy){for(float v:new float[]{ax,ay,0,bx,by,0,cx,cy,0})data.add(v);}
-    private static int link(String v,String f){int p=glCreateProgram();for(int type:new int[]{GL_VERTEX_SHADER,GL_FRAGMENT_SHADER}){int s=glCreateShader(type);glShaderSource(s,type==GL_VERTEX_SHADER?v:f);glCompileShader(s);int[] ok=new int[1];glGetShaderiv(s,GL_COMPILE_STATUS,ok,0);if(ok[0]==0)throw new IllegalStateException(glGetShaderInfoLog(s));glAttachShader(p,s);glDeleteShader(s);}glLinkProgram(p);int[] ok=new int[1];glGetProgramiv(p,GL_LINK_STATUS,ok,0);if(ok[0]==0)throw new IllegalStateException(glGetProgramInfoLog(p));return p;}
+    private void portal(String id,String label,float yaw,float pitch) {target(id,label,yaw,pitch,5,true);}
+    private void item(String id,String label,int cell,float yaw,float pitch,float distance,float halfWidth,float halfHeight,boolean selected) {
+        Target target=target(id,label,yaw,pitch,distance,"menu".equals(id));
+        sprites.add(new Sprite(cell,target.x,target.y,target.z,halfWidth,halfHeight,selected));
+    }
+    private Target target(String id,String label,float yaw,float pitch,float distance,boolean portal) {
+        double horizontal=Math.toRadians(yaw),vertical=Math.toRadians(pitch);
+        float x=(float)(Math.sin(horizontal)*Math.cos(vertical)*distance);
+        float y=(float)(Math.sin(vertical)*distance);
+        float z=(float)(-Math.cos(horizontal)*Math.cos(vertical)*distance);
+        Target target=new Target(id,label,x,y,z,portal);targets.add(target);return target;
+    }
+
+    private Caption makeCaption(String text,String style) {
+        boolean body="message".equals(style),title="title".equals(style);
+        Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);paint.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
+        paint.setTextSize(body?43:44);paint.setTextAlign(Paint.Align.CENTER);
+        int bitmapWidth=body?1024:Math.max(160,Math.min(1000,(int)Math.ceil(paint.measureText(text))+70));
+        List<String> lines=new ArrayList<>();String line="";
+        for(String word:text.split(" ")) {
+            String next=line.isEmpty()?word:line+" "+word;
+            if(!line.isEmpty()&&paint.measureText(next)>bitmapWidth-70){lines.add(line);line=word;}else line=next;
+        }
+        lines.add(line);int bitmapHeight=lines.size()*54+44;
+        Bitmap bitmap=Bitmap.createBitmap(bitmapWidth,bitmapHeight,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);
+        paint.setColor(0xe6152336);canvas.drawRoundRect(1,1,bitmapWidth-1,bitmapHeight-1,24,24,paint);
+        paint.setColor(title?0xffffdf9d:Color.WHITE);
+        Paint.FontMetrics metrics=paint.getFontMetrics();float baseline=(bitmapHeight-(lines.size()-1)*54)/2f-(metrics.ascent+metrics.descent)/2;
+        for(String value:lines){canvas.drawText(value,bitmapWidth/2f,baseline,paint);baseline+=54;}
+        int texture=upload(bitmap);bitmap.recycle();return new Caption(texture,(float)bitmapWidth/bitmapHeight);
+    }
+    private int loadAsset(String filename) {
+        try(InputStream input=context.getAssets().open("art/"+filename)) {
+            BitmapFactory.Options options=new BitmapFactory.Options();options.inScaled=false;
+            Bitmap bitmap=BitmapFactory.decodeStream(input,null,options);
+            if(bitmap==null)throw new IOException("Invalid image: "+filename);
+            int[] limit=new int[1];glGetIntegerv(GL_MAX_TEXTURE_SIZE,limit,0);
+            if(bitmap.getWidth()>limit[0]||bitmap.getHeight()>limit[0]) {
+                float scale=Math.min((float)limit[0]/bitmap.getWidth(),(float)limit[0]/bitmap.getHeight());
+                Bitmap reduced=Bitmap.createScaledBitmap(bitmap,Math.max(1,Math.round(bitmap.getWidth()*scale)),Math.max(1,Math.round(bitmap.getHeight()*scale)),true);
+                bitmap.recycle();bitmap=reduced;
+            }
+            int texture=upload(bitmap);bitmap.recycle();return texture;
+        }catch(IOException error){throw new IllegalStateException("Game artwork unavailable: "+filename,error);}
+    }
+    private static int upload(Bitmap bitmap) {
+        int[] result=new int[1];glGenTextures(1,result,0);glBindTexture(GL_TEXTURE_2D,result[0]);textureParameters();
+        GLUtils.texImage2D(GL_TEXTURE_2D,0,bitmap,0);return result[0];
+    }
+    private static void textureParameters() {
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+    }
+    private static int link(String vertex,String fragment) {
+        int program=glCreateProgram();
+        for(int type:new int[]{GL_VERTEX_SHADER,GL_FRAGMENT_SHADER}) {
+            int shader=glCreateShader(type);glShaderSource(shader,type==GL_VERTEX_SHADER?vertex:fragment);glCompileShader(shader);
+            int[] success=new int[1];glGetShaderiv(shader,GL_COMPILE_STATUS,success,0);
+            if(success[0]==0)throw new IllegalStateException(glGetShaderInfoLog(shader));
+            glAttachShader(program,shader);glDeleteShader(shader);
+        }
+        glLinkProgram(program);int[] success=new int[1];glGetProgramiv(program,GL_LINK_STATUS,success,0);
+        if(success[0]==0)throw new IllegalStateException(glGetProgramInfoLog(program));return program;
+    }
 }

@@ -18,7 +18,7 @@ Ein kleines Android-Abenteuer für Papp-VR-Brillen und zum Ausprobieren am Handy
 
 ## VR-Profil und Grenzen dieser ersten Version
 
-Native OpenGL-ES-2.0-Szenen mit getrennten, parallel ausgerichteten Augenansichten, Augenabstand und radialer Linsenkorrektur. Linsenkorrektur und Augenabstand lassen sich vor dem Start einstellen. Es gibt noch keinen Cardboard-QR-Profilscanner, keine individuelle asymmetrische Linsenkalibrierung und keine Positionsverfolgung. Die Eignung und Schärfe hängen von Handy und Brille ab. Kopfsteuerung, Bildausrichtung und Komfort müssen an einer echten Brille geprüft werden; Emulatorprüfungen ersetzen diesen Test nicht. Der Handy-Modus funktioniert auch ohne Bewegungssensor.
+Seit 0.2.0 bestehen die Orte aus gemalten 360°-Panoramen. Freigestellte Gegenstände werden auf räumlich platzierten Flächen pro Auge getrennt gezeichnet. Der Hintergrund selbst ist monoskopisch (ohne Tiefenparallaxe), die Gegenstände und das Fadenkreuz verwenden die Stereo-Kameras. OpenGL ES 2.0 übernimmt Augenabstand und radiale Linsenkorrektur. Linsenkorrektur und Augenabstand lassen sich vor dem Start einstellen. Es gibt noch keinen Cardboard-QR-Profilscanner, keine individuelle asymmetrische Linsenkalibrierung und keine Positionsverfolgung. Die Eignung und Schärfe hängen von Handy und Brille ab. Kopfsteuerung, Bildausrichtung und Komfort müssen an einer echten Brille geprüft werden; Emulatorprüfungen ersetzen diesen Test nicht. Der Handy-Modus funktioniert auch ohne Bewegungssensor.
 
 Kurze Spielrunden im Sitzen, bei Kindern mit Begleitung eines Erwachsenen. Bei Unwohlsein die Brille abnehmen. Hardware-Altersempfehlungen der jeweiligen Brille beachten.
 
@@ -38,8 +38,12 @@ bash scripts/test-update-contract.sh
 
 Installationen aus Google Play nutzen Google Play (einschließlich In-App-Update bei manueller Suche). Direkt installierte APKs nutzen das gemeinsame MeiApps-Updateverfahren: tägliche optionale Prüfung, Installationsbestätigung, SHA-256-, Paket-, Versions- und Zertifikatsprüfung. Das Spiel selbst benötigt keine Verbindung, kein Konto und keine Kamera.
 
-Für dauerhaft installierbare GitHub-Releases das Repository-Secret `MEI_SIGNING_JSON` hinterlegen. Inhalt: JSON mit `keystore` (Base64-PKCS12), `password`, `alias` und optional `keyPassword`. Den privaten Schlüssel sichern; nie ins Repository committen. Ohne Secret bleiben CI-APKs reine Testbuilds. Sobald die Prüfungen auf `main` grün sind, veröffentlicht CI mit konfiguriertem Schlüssel Version `0.1.0` und den Updatekanal. Bei Folgeversionen `versionCode` erhöhen; veröffentlichte APKs werden nicht überschrieben.
+Für dauerhaft installierbare GitHub-Releases das Repository-Secret `MEI_SIGNING_JSON` hinterlegen. Inhalt: JSON mit `keystore` (Base64-PKCS12), `password`, `alias` und optional `keyPassword`. Den privaten Schlüssel sichern; nie ins Repository committen. Ohne Secret bleiben CI-APKs reine Testbuilds. Sobald die Prüfungen auf `main` grün sind, veröffentlicht CI mit konfiguriertem Schlüssel Version `0.2.0` und den Updatekanal. Bei Folgeversionen `versionCode` erhöhen; veröffentlichte APKs werden nicht überschrieben.
 
 ## Datenschutz
 
 Spielstand und Einstellungen bleiben auf dem Gerät. Keine Werbung, Analyse, Mikrofon- oder Kameranutzung. Updateprüfungen kontaktieren GitHub oder Google Play. Die Sprachausgabe erfolgt über die konfigurierte Android-TTS-Engine; deren Datenschutz und gegebenenfalls Onlineverarbeitung hängen vom installierten Anbieter ab.
+
+## Grafiken
+
+Gemalte Hintergründe und Gegenstände sind vollständig in der APK enthalten. Es werden beim Spielen keine Bilder heruntergeladen. Dateipfade, Atlasbelegung, Bildbeschreibungen und technische Grenzen sind in [docs/ART.md](docs/ART.md) dokumentiert.
