@@ -83,8 +83,10 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
         if(stereo) tracker.copyView(head); else {Matrix.setIdentityM(head,0);Matrix.rotateM(head,0,pitch,1,0,0);Matrix.rotateM(head,0,yaw,0,1,0);}
         float[] forward={-head[2],-head[6],-head[10]};
         Target focused=null;double best=-1;
-        for(Target t:targets) if(Gaze.hits(forward,t.x,t.y,t.z,.145f)) {
-            double score=(forward[0]*t.x+forward[1]*t.y+forward[2]*t.z)/Math.sqrt(t.x*t.x+t.y*t.y+t.z*t.z);
+        for(Target t:targets) if(Gaze.hits(forward,t.x,t.y,t.z,.145f)||Gaze.hits(forward,t.x,t.y+.48f,t.z,.11f)) {
+            double objectScore=(forward[0]*t.x+forward[1]*t.y+forward[2]*t.z)/Math.sqrt(t.x*t.x+t.y*t.y+t.z*t.z);
+            double labelScore=(forward[0]*t.x+forward[1]*(t.y+.48f)+forward[2]*t.z)/Math.sqrt(t.x*t.x+(t.y+.48f)*(t.y+.48f)+t.z*t.z);
+            double score=Math.max(objectScore,labelScore);
             if(score>best){best=score;focused=t;}
         }
         if(now-fadeStart>650 && gaze.update(focused==null?null:focused.id,now)) {
@@ -106,7 +108,7 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
             drawLabel(game.title(),0,.98f,-2.3f,1,.105f,0xfff9d78a,true);
             drawLabel(message,0,-.83f,-2.3f,1.05f,.26f,Color.WHITE,true);
             glDisable(GL_DEPTH_TEST);
-            drawLabel("+",0,0,-2.3f,.035f,.035f,focused==null?Color.WHITE:0xff7ce9d9,true);
+            drawBox(0,0,-2.3f,.008f,.008f,.001f,focused==null?Color.WHITE:0xff7ce9d9,false);
             if(focused!=null) {
                 for(int i=0;i<32;i++) {
                     double angle=i*Math.PI*2/32;
