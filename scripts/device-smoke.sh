@@ -10,7 +10,7 @@ grep -q 'OK (1 test)' device-results/instrumentation.txt
 adb pull /sdcard/Android/data/de.meiapps.sternenreise/files/menu.png device-results/menu.png
 adb pull /sdcard/Android/data/de.meiapps.sternenreise/files/phone.png device-results/phone.png
 adb pull /sdcard/Android/data/de.meiapps.sternenreise/files/stereo.png device-results/stereo.png
-for image in garden flower observatory ending; do
+for image in open-chest garden sprout flower observatory ending; do
   adb pull "/sdcard/Android/data/de.meiapps.sternenreise/files/$image.png" "device-results/$image.png"
 done
 adb logcat -d > device-results/logcat.txt

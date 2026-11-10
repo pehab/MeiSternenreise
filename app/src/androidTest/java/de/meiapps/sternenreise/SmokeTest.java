@@ -41,10 +41,14 @@ public class SmokeTest {
         SystemClock.sleep(900);instrumentation.waitForIdleSync();screenshot(instrumentation,"stereo.png");
         instrumentation.runOnMainSync(()->((MainActivity)activity).startGame(false));
         SystemClock.sleep(600);
-        activate(instrumentation,activity,"key");activate(instrumentation,activity,"chest");activate(instrumentation,activity,"garden");
+        activate(instrumentation,activity,"key");activate(instrumentation,activity,"chest");
+        SystemClock.sleep(200);screenshot(instrumentation,"open-chest.png");
+        activate(instrumentation,activity,"garden");
         assertEquals(Adventure.Room.GARDEN,saved(instrumentation).room());
         SystemClock.sleep(600);screenshot(instrumentation,"garden.png");
-        activate(instrumentation,activity,"pot");activate(instrumentation,activity,"water");activate(instrumentation,activity,"flower");
+        activate(instrumentation,activity,"pot");
+        SystemClock.sleep(200);screenshot(instrumentation,"sprout.png");
+        activate(instrumentation,activity,"water");activate(instrumentation,activity,"flower");
         SystemClock.sleep(300);screenshot(instrumentation,"flower.png");
         activate(instrumentation,activity,"observatory");
         assertEquals(Adventure.Room.OBSERVATORY,saved(instrumentation).room());

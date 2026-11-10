@@ -34,6 +34,9 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
     private static final int POT=4, SPROUT=5, FLOWER=6, WATERING_CAN=7;
     private static final int MACHINE=8, LIT_MACHINE=9, STAR=10, MOON=11, SUN=12, HOME=15;
     private static final float LABEL_OFFSET=.48f;
+    // Visible bottom edges inside the padded atlas cells; +1 is the quad's bottom.
+    private static final float[] FOOT={.894f,.849f,.733f,.823f,.830f,.836f,.875f,.740f,
+        .862f,.862f,.701f,.772f,.772f,.727f,.894f,.842f};
     private record Target(String id,String label,float x,float y,float z,boolean portal) { }
     private record Sprite(int cell,float x,float y,float z,float halfWidth,float halfHeight,boolean selected) { }
     private record Caption(int texture,float aspect) { }
@@ -155,7 +158,7 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
             Matrix.setIdentityM(view,0);
             if(stereo)Matrix.translateM(view,0,eye==0?eyeSeparation/2:-eyeSeparation/2,0,0);
             drawCaption(game.finished()?"Geschafft! · Sternenlicht gerettet":game.title(),0,1.03f,-2.3f,.92f,"title",true);
-            drawCaption(message,0,-.86f,-2.3f,1.03f,"message",true);
+            drawCaption(message,0,-1.12f,-2.3f,1.03f,"message",true);
             drawReticle(focused!=null,progress);
             glBindFramebuffer(GL_FRAMEBUFFER,0);glViewport(stereo?eye*eyeWidth:0,0,eyeWidth,height);
             glUseProgram(distortionProgram);position(distortionPosition);
@@ -248,32 +251,39 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
             });
             lastRoom=game.room().ordinal();fadeStart=SystemClock.uptimeMillis();yaw=0;pitch=0;tracker.center();gaze.reset();
         }
-        item("hint","Lumi · Hilfe",LUMI,-35,-13,3.5f,.55f,.74f,false);
+        // Each location has its own supporting surface in the painted panorama.
+        float lumiFootPitch=switch(game.room()) {
+            case WORKSHOP -> -7;case GARDEN -> -26;case OBSERVATORY -> -21;
+        };
+        supportedItem("hint","Lumi · Hilfe",LUMI,-35,lumiFootPitch,3.5f,.46f,.60f,false);
         item("menu","Pause · Zum Menü",HOME,180,-25,3,.2f,.2f,true);
         switch(game.room()) {
             case WORKSHOP -> {
-                if(!game.hasKey())item("key","Goldener Schlüssel",KEY,-12,5,3.5f,.27f,.4f,false);
-                item("chest",game.hasSeed()?"Geöffnete Truhe":"Kleine Truhe",game.hasSeed()?OPEN_CHEST:CHEST,20,-18,3.5f,.64f,.48f,false);
+                if(!game.hasKey())supportedItem("key","Goldener Schlüssel",KEY,-12,0,3.5f,.27f,.4f,false);
+                supportedItem("chest",game.hasSeed()?"Geöffnete Truhe":"Kleine Truhe",game.hasSeed()?OPEN_CHEST:CHEST,20,-7,3.5f,.60f,.48f,false);
                 portal("garden","In den Mondgarten",72,-3);
             }
             case GARDEN -> {
                 int flowerSprite=game.watered()?FLOWER:game.planted()?SPROUT:POT;
-                item("pot",game.watered()?"Mondblume":game.planted()?"Kleiner Sprössling":"Mondensamen einpflanzen",
-                    flowerSprite,-15,game.watered()?-8:-20,3.5f,.55f,game.watered()?.85f:.48f,false);
-                if(game.watered())target("flower",game.hasCrystal()?"Mondblume untersuchen":"Sternenkristall nehmen",-15,4,3.5f,false);
-                item("water","Gießkanne",WATERING_CAN,22,-20,3.5f,.53f,.52f,false);
+                // Grow upwards from the same stone rim, including transparent atlas padding.
+                float plantSize=game.watered()?.76f:.55f;
+                supportedItem(game.watered()?"flower":"pot",
+                    game.watered()?(game.hasCrystal()?"Mondblume untersuchen":"Sternenkristall nehmen")
+                        :game.planted()?"Kleiner Sprössling":"Mondensamen einpflanzen",
+                    flowerSprite,-15,-26,3.5f,plantSize,plantSize,false);
+                supportedItem("water","Gießkanne",WATERING_CAN,22,-27,3.5f,.53f,.52f,false);
                 portal("back","Zurück ins Haus",-131,-4);
                 portal("observatory","Zur Sternwarte",126,-2);
             }
             case OBSERVATORY -> {
                 String[] ids={"star","moon","sun"},names={"Stern","Mond","Sonne"};int[] cells={STAR,MOON,SUN};
                 for(int index=0;index<3;index++)item(ids[index],names[index],cells[index],(index-1)*16,-13,3.2f,.28f,.28f,game.symbols()>index);
-                item("machine",game.finished()?"Das Sternenlicht leuchtet!":"Sternenmaschine",game.finished()?LIT_MACHINE:MACHINE,
-                    106,-3,4,.75f,1,false);
+                supportedItem("machine",game.finished()?"Das Sternenlicht leuchtet!":"Sternenmaschine",game.finished()?LIT_MACHINE:MACHINE,
+                    106,-14,4,.75f,1,false);
                 portal("back","Zurück in den Garten",-156,-4);
             }
         }
-        if(game.finished())item("menu","Abenteuer geschafft · Zum Menü",HOME,0,-33,2.8f,.19f,.19f,true);
+        if(game.finished())item("menu","Abenteuer geschafft · Zum Menü",HOME,34,-14,2.8f,.19f,.19f,true);
         sprites.sort(Comparator.comparingDouble((Sprite sprite)->sprite.x*sprite.x+sprite.y*sprite.y+sprite.z*sprite.z).reversed());
     }
     private void portal(String id,String label,float yaw,float pitch) {target(id,label,yaw,pitch,5,true);}
@@ -281,10 +291,18 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
         Target target=target(id,label,yaw,pitch,distance,"menu".equals(id));
         sprites.add(new Sprite(cell,target.x,target.y,target.z,halfWidth,halfHeight,selected));
     }
+    private void supportedItem(String id,String label,int cell,float yaw,float footPitch,float distance,
+                               float halfWidth,float halfHeight,boolean selected) {
+        Target center=target(id,label,yaw,footPitch,distance,false,halfHeight*FOOT[cell]);
+        sprites.add(new Sprite(cell,center.x,center.y,center.z,halfWidth,halfHeight,selected));
+    }
     private Target target(String id,String label,float yaw,float pitch,float distance,boolean portal) {
+        return target(id,label,yaw,pitch,distance,portal,0);
+    }
+    private Target target(String id,String label,float yaw,float pitch,float distance,boolean portal,float lift) {
         double horizontal=Math.toRadians(yaw),vertical=Math.toRadians(pitch);
         float x=(float)(Math.sin(horizontal)*Math.cos(vertical)*distance);
-        float y=(float)(Math.sin(vertical)*distance);
+        float y=(float)(Math.sin(vertical)*distance)+lift;
         float z=(float)(-Math.cos(horizontal)*Math.cos(vertical)*distance);
         Target target=new Target(id,label,x,y,z,portal);targets.add(target);return target;
     }

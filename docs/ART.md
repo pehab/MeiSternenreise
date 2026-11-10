@@ -29,3 +29,7 @@ Die Panoramen werden anhand der Blickrichtung sphärisch abgetastet, nicht als f
 Die Umgebung ist gemalt und daher selbst ohne stereoskopische Tiefenparallaxe. Ein Panorama enthält keine frei begehbare Geometrie. Bei starker Vergrößerung kann die begrenzte Bildauflösung sichtbar werden; die generierten Rundumansichten können insbesondere hinter dem Spieler eine sichtbare Naht enthalten. Dieses Verfahren ist für die festen Aussichtspunkte vorgesehen. Die Bilddateien bilden kein vollständiges fotogrammetrisches oder individuell kalibriertes Cardboard-Szenenmodell.
 
 Blickziele für die Übergänge sind auf die sichtbaren Türen und Gebäude abgestimmt. Gegenstandsbeschriftungen erscheinen beim Untersuchen; Ziele für Raumwechsel und Menü bleiben sichtbar. Alle Hinweise und der Spielstand stammen aus derselben unveränderten Story-Logik wie in 0.1.0.
+
+## Auflagepunkte ab 0.2.1
+
+Gegenstände auf gemalten Flächen werden an der sichtbaren Unterkante ihrer Atlaszelle verankert. `FOOT` im Renderer berücksichtigt den transparenten Rand pro Zelle. Der angegebene Winkel beschreibt die Auflagefläche im Panorama; die Bildmitte und das Blickziel werden um den sichtbaren Fußabstand angehoben. Dadurch bleiben Truhenboden und Topfboden beim Wechsel des Bildes fest. Topf und Sprössling verwenden dieselbe Größe; die Blume wächst mit größerer quadratischer Darstellung nach oben. Werkstatt und Sternwarte haben eigene Ablagehöhen für Lumi. Der freie Bildschirmbereich unterhalb der Bildmitte bleibt für die Gegenstände reserviert, Hinweise sitzen am unteren Rand.
