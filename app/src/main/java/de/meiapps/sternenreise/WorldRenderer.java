@@ -104,8 +104,9 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
             for(Solid s:solids) drawSolid(s);
             for(Target t:targets) drawLabel(t.label,t.x,t.y+.48f,t.z,.55f,.13f,Color.WHITE,false);
             // Head-locked panels sit at a comfortable finite distance in both eyes.
+            glDisable(GL_DEPTH_TEST);
             Matrix.setIdentityM(view,0);if(stereo)Matrix.translateM(view,0,eye==0?eyeSeparation/2:-eyeSeparation/2,0,0);
-            drawLabel(game.title(),0,.98f,-2.3f,1,.105f,0xfff9d78a,true);
+            drawLabel(game.title(),0,.98f,-2.3f,1,.18f,0xfff9d78a,true);
             drawLabel(message,0,-.83f,-2.3f,1.05f,.26f,Color.WHITE,true);
             glDisable(GL_DEPTH_TEST);
             drawBox(0,0,-2.3f,.008f,.008f,.001f,focused==null?Color.WHITE:0xff7ce9d9,false);

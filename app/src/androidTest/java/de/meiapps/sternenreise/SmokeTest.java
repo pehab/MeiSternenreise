@@ -25,6 +25,7 @@ public class SmokeTest {
         i.runOnMainSync(()->((MainActivity)a).startGame(true));SystemClock.sleep(1200);i.waitForIdleSync();screenshot(i,"stereo.png");
         i.runOnMainSync(a::onBackPressed);i.waitForIdleSync();
         i.runOnMainSync(()->assertNotNull(find(a.getWindow().getDecorView(),"Am Handy spielen")));
+        SystemClock.sleep(500);screenshot(i,"menu.png");
         i.runOnMainSync(()->a.recreate());i.waitForIdleSync();
     }
     private void screenshot(Instrumentation i,String name) throws Exception {
