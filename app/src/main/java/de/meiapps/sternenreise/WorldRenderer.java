@@ -41,12 +41,12 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
     // Angles were inspected in all four panoramas (see docs/PLACEMENT.md).
     private record Support(float yaw,float pitch,float distance) { }
     private static final Support HOUSE_LUMI=new Support(-78,-42,3.5f), HOUSE_KEY=new Support(-65,-6,3.5f),
-        HOUSE_CHEST=new Support(48,-40,3.5f), HOUSE_NOTE=new Support(-158,-7,4), HOUSE_OWL=new Support(-43,-6,4),
-        GARDEN_LUMI=new Support(-99,-42,3.5f), GARDEN_PLANT=new Support(-62,-38,3.5f),
-        GARDEN_WATER=new Support(74,-38,3.5f), GARDEN_BAG=new Support(105,-34,4),
-        SMALL_CAN=new Support(-64,-40,3.5f), LARGE_CAN=new Support(64,-40,3.5f),
-        GARDEN_PUMP=new Support(98,-36,4), DEW_FLOWER=new Support(-43,-36,3.5f),
-        GARDEN_OIL=new Support(-71,-40,3.5f), GARDEN_GEAR=new Support(65,-38,3.5f),
+        HOUSE_CHEST=new Support(48,-40,3.5f), HOUSE_NOTE=new Support(-158,-3,4), HOUSE_OWL=new Support(-43,-6,4),
+        GARDEN_LUMI=new Support(-99,-42,3.5f), GARDEN_PLANT=new Support(-62,-44,3.5f),
+        GARDEN_WATER=new Support(74,-44,3.5f), GARDEN_BAG=new Support(105,-34,4),
+        SMALL_CAN=new Support(-64,-44,3.5f), LARGE_CAN=new Support(64,-46,3.5f),
+        GARDEN_PUMP=new Support(98,-36,4), DEW_FLOWER=new Support(-43,-44,3.5f),
+        GARDEN_OIL=new Support(-71,-44,3.5f), GARDEN_GEAR=new Support(65,-45,3.5f),
         OBS_LUMI=new Support(-122,-43,3.5f), OBS_OWL=new Support(-115,-16,4),
         OBS_NOTE=new Support(160,-13,4), OBS_MACHINE=new Support(106,-13,4);
     private final float[] spriteFeet=new float[32];
@@ -347,9 +347,9 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
             portal("back","Zurück ins Haus",game.chapter()==4?-101:-131,game.chapter()==4?10:-4);portal("observatory","Zur Sternwarte",game.chapter()==4?110:130,game.chapter()==4?10:5);
             switch(game.chapter()){
                 case 1 -> {
-                    restingItem("sun","Sonnenpost einordnen",SUN_MAIL,new Support(-109,-10,3.8f),.36f,.36f,false);
-                    restingItem("moon","Mondpost einordnen",MOON_MAIL,new Support(-94,-10,3.8f),.36f,.36f,false);
-                    restingItem("star","Sternenpost einordnen",STAR_MAIL,new Support(-79,-10,3.8f),.36f,.36f,false);
+                    restingItem("sun","Sonnenpost einordnen",SUN_MAIL,new Support(-104,-10,3.8f),.28f,.28f,false);
+                    restingItem("moon","Mondpost einordnen",MOON_MAIL,new Support(-94,-10,3.8f),.28f,.28f,false);
+                    restingItem("star","Sternenpost einordnen",STAR_MAIL,new Support(-84,-10,3.8f),.28f,.28f,false);
                     restingItem("inspect_bag","Mondpost",MAILBAG,GARDEN_BAG,.45f,.45f,false);
                 }
                 case 2 -> {

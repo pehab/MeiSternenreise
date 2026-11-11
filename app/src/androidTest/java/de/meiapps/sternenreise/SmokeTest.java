@@ -127,6 +127,7 @@ public class SmokeTest {
     }
     private record Probe(String id,float x,float y,float z) { }
     private void inspectScene(Instrumentation i,Activity a,String phase) throws Exception {
+        SystemClock.sleep(700); // Inspect after the room fade has fully settled.
         java.util.concurrent.atomic.AtomicReference<WorldRenderer> renderer=new java.util.concurrent.atomic.AtomicReference<>();
         java.util.concurrent.atomic.AtomicReference<android.opengl.GLSurfaceView> surface=new java.util.concurrent.atomic.AtomicReference<>();
         i.runOnMainSync(()->{try{renderer.set((WorldRenderer)field(a,"renderer"));surface.set((android.opengl.GLSurfaceView)field(a,"surface"));}catch(Exception failure){throw new AssertionError(failure);}});
