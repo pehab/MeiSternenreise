@@ -384,7 +384,12 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
             for(int i=0;i<3;i++)restingItem(ids[i],names[i]+(game.chapter()==1?" · Briefkasten":" · Zeichen wählen"),cells[i],new Support((i-1)*20,-18,3.6f),.36f,.36f,false);
         }
         if(game.chapter()==3){
-            for(int i=0;i<3;i++)restingItem("lever_"+(char)('a'+i),new String[]{"Linker Hebel","Mittlerer Hebel","Rechter Hebel"}[i],GEAR,new Support((i-1)*20,-18,4),.33f,.40f,false);
+            for(int i=0;i<3;i++) {
+                restingItem("lever_"+(char)('a'+i),new String[]{"Linker Hebel","Mittlerer Hebel","Rechter Hebel"}[i],GEAR,new Support((i-1)*20,-18,4),.33f,.40f,false);
+                // The current sign belongs on the gear face, rather than floating above the desk.
+                Sprite gear=sprites.get(sprites.size()-1);
+                sprites.add(new Sprite(new int[]{STAR,MOON,SUN}[game.wheel(i)],gear.x*.985f,gear.y+.03f,gear.z*.985f,.14f,.14f,false));
+            }
             portal("reset_puzzle","Alle Zeiger auf Anfang",-175,15);
         }
         restingItem("machine",game.finished()?"Kapitel geschafft":game.chapter()==3?"Sternenuhr prüfen":"Sternenmaschine",game.chapter()==3?CLOCK:game.finished()?LIT_MACHINE:MACHINE,OBS_MACHINE,.78f,.78f,false);
