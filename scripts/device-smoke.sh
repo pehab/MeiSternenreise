@@ -13,8 +13,8 @@ adb install -r "$(find test-apks -name app-github-debug-androidTest.apk -print -
 adb shell settings put secure immersive_mode_confirmations confirmed
 adb logcat -c
 adb shell am instrument -w de.meiapps.sternenreise.test/androidx.test.runner.AndroidJUnitRunner | tee device-results/instrumentation.txt
-grep -q 'OK (1 test)' device-results/instrumentation.txt
-for image in menu phone stereo open-chest garden sprout flower observatory ending; do
+grep -Eq 'OK \([0-9]+ tests?\)' device-results/instrumentation.txt
+for image in menu phone stereo alignment open-chest garden sprout flower observatory ending; do
   adb shell test -f "/sdcard/Android/data/de.meiapps.sternenreise/files/$image.png"
 done
 adb logcat -d > device-results/logcat.txt

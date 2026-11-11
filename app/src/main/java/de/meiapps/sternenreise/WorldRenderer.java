@@ -46,7 +46,10 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
     private final HeadTracker tracker;
     private final Events events;
     private final boolean stereo;
-    private final float lens, eyeSeparation;
+    private final float lens;
+    private float eyeSeparation,lensSpacingMm,physicalWidthMm=150;
+    private final float configuredWidthMm,verticalOffsetMm;
+    private boolean calibration;
     private final Gaze gaze=new Gaze();
     private final List<Target> targets=new ArrayList<>();
     private final List<Sprite> sprites=new ArrayList<>();
@@ -62,7 +65,7 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
     private int foregroundProgram,panoramaProgram,distortionProgram;
     private int positionAttribute,uvAttribute,matrixUniform,colorUniform,samplerUniform;
     private int panoramaPosition,panoramaHead,panoramaTangents,panoramaSampler;
-    private int distortionPosition,distortionLens,distortionFade,distortionSampler;
+    private int distortionPosition,distortionLens,distortionFade,distortionSampler,distortionCenter;
     private int framebuffer,eyeTexture,panoramaTexture,atlasTexture,whiteTexture;
     private long fadeStart;
 
@@ -70,6 +73,9 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
                   float lens,float eyeSeparation,Events events) {
         this.context=context;this.game=game;this.tracker=tracker;this.stereo=stereo;
         this.lens=lens;this.eyeSeparation=eyeSeparation;this.events=events;message=game.hint();
+        android.content.SharedPreferences settings=context.getSharedPreferences("adventure",Context.MODE_PRIVATE);
+        lensSpacingMm=ViewerOptics.lensDistanceMm(eyeSeparation*1000);
+        configuredWidthMm=settings.getFloat("vrScreenWidthMm",0);verticalOffsetMm=settings.getFloat("vrVerticalMm",0);
         for(int cell=0;cell<16;cell++) {
             // Slight inset keeps bilinear filtering inside each transparent atlas cell.
             float left=(cell%4)/4f+.001f,right=(cell%4+1)/4f-.001f;
@@ -79,6 +85,8 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
     }
     void look(float dx,float dy) { yaw+=dx;pitch=Math.max(-75,Math.min(75,pitch+dy)); }
     void resetGaze() { gaze.reset(); }
+    void setCalibration(boolean enabled) { calibration=enabled;gaze.reset(); }
+    void setLensSpacing(float millimeters) { lensSpacingMm=ViewerOptics.lensDistanceMm(millimeters);eyeSeparation=lensSpacingMm/1000; }
     void refresh(String text) { message=text;rebuildScene(); }
     private static FloatBuffer buffer(float... values) {
         FloatBuffer result=ByteBuffer.allocateDirect(values.length*4).order(ByteOrder.nativeOrder()).asFloatBuffer();
@@ -94,7 +102,7 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
             "precision mediump float;varying vec3 direction;uniform sampler2D image;void main(){vec3 ray=normalize(direction);float u=fract(.5+atan(ray.x,-ray.z)/6.283185307);float v=.5-asin(clamp(ray.y,-1.,1.))/3.141592654;gl_FragColor=texture2D(image,vec2(u,v));}");
         distortionProgram=link(
             "attribute vec3 position;varying vec2 point;void main(){gl_Position=vec4(position,1.);point=position.xy;}",
-            "precision mediump float;varying vec2 point;uniform sampler2D image;uniform float lens;uniform float fade;void main(){vec2 source=point*(1.+lens*dot(point,point));if(abs(source.x)>1.||abs(source.y)>1.)gl_FragColor=vec4(0.,0.,0.,1.);else gl_FragColor=vec4(texture2D(image,(source+1.)*.5).rgb*fade,1.);}");
+            "precision mediump float;varying vec2 point;uniform sampler2D image;uniform float lens;uniform float fade;uniform vec2 center;void main(){vec2 ray=point-center;vec2 source=ray*(1.+lens*dot(ray,ray));if(abs(source.x)>1.||abs(source.y)>1.)gl_FragColor=vec4(0.,0.,0.,1.);else gl_FragColor=vec4(texture2D(image,(source+1.)*.5).rgb*fade,1.);}");
         positionAttribute=glGetAttribLocation(foregroundProgram,"position");
         uvAttribute=glGetAttribLocation(foregroundProgram,"texCoord");
         matrixUniform=glGetUniformLocation(foregroundProgram,"matrix");
@@ -108,6 +116,7 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
         distortionLens=glGetUniformLocation(distortionProgram,"lens");
         distortionFade=glGetUniformLocation(distortionProgram,"fade");
         distortionSampler=glGetUniformLocation(distortionProgram,"image");
+        distortionCenter=glGetUniformLocation(distortionProgram,"center");
         captions.clear();framebuffer=0;eyeTexture=0;panoramaTexture=0;lastRoom=-1;
         atlasTexture=loadAsset("sprites.webp");
         Bitmap white=Bitmap.createBitmap(1,1,Bitmap.Config.ARGB_8888);white.eraseColor(Color.WHITE);
@@ -117,7 +126,10 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
         rebuildScene();
     }
     @Override public void onSurfaceChanged(GL10 unused,int width,int height) {
-        this.width=width;this.height=height;eyeWidth=stereo?width/2:width;allocateEye();
+        this.width=width;this.height=height;eyeWidth=stereo?width/2:width;
+        android.util.DisplayMetrics metrics=context.getResources().getDisplayMetrics();
+        physicalWidthMm=ViewerOptics.screenWidthMm(configuredWidthMm,width,metrics.xdpi,metrics.ydpi);
+        allocateEye();
     }
     private void allocateEye() {
         if(eyeTexture!=0) {glDeleteTextures(1,new int[]{eyeTexture},0);glDeleteFramebuffers(1,new int[]{framebuffer},0);}
@@ -135,7 +147,7 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
         if(stereo)tracker.copyView(head);
         else {Matrix.setIdentityM(head,0);Matrix.rotateM(head,0,pitch,1,0,0);Matrix.rotateM(head,0,yaw,0,1,0);}
         Matrix.transposeM(inverseHead,0,head,0);
-        Target focused=findTarget(-head[2],-head[6],-head[10]);
+        Target focused=calibration?null:findTarget(-head[2],-head[6],-head[10]);
         if(now-fadeStart>650 && gaze.update(focused==null?null:focused.id,now))events.activate(focused.id);
         float progress=gaze.progress(now);
         float fieldOfView=stereo?82:65;
@@ -143,6 +155,9 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
         for(int eye=0;eye<(stereo?2:1);eye++) {
             glBindFramebuffer(GL_FRAMEBUFFER,framebuffer);glViewport(0,0,eyeWidth,height);
             glClearColor(.03f,.06f,.1f,1);glClear(GL_COLOR_BUFFER_BIT);
+            if(calibration) {
+                Matrix.setIdentityM(view,0);Matrix.setIdentityM(projection,0);drawAlignment();
+            } else {
             drawPanorama(tangentY);
             Matrix.perspectiveM(projection,0,fieldOfView,(float)eyeWidth/height,.08f,40);
             Matrix.setIdentityM(view,0);
@@ -160,13 +175,28 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
             drawCaption(game.finished()?"Geschafft! · Sternenlicht gerettet":game.title(),0,1.21f,-2.3f,.75f,"title",true);
             drawCaption(message,0,.77f,-2.3f,1.03f,"message",true);
             drawReticle(focused!=null,progress);
+            }
             glBindFramebuffer(GL_FRAMEBUFFER,0);glViewport(stereo?eye*eyeWidth:0,0,eyeWidth,height);
             glUseProgram(distortionProgram);position(distortionPosition);
             bindTexture(eyeTexture,distortionSampler);
             glUniform1f(distortionLens,stereo?lens:0);
+            glUniform2f(distortionCenter,stereo?ViewerOptics.centerX(eye,physicalWidthMm,lensSpacingMm):0,
+                stereo?ViewerOptics.centerY(verticalOffsetMm,physicalWidthMm*height/width):0);
             glUniform1f(distortionFade,Math.max(0,Math.min(1,(now-fadeStart)/450f)));
             glDrawArrays(GL_TRIANGLE_STRIP,0,4);glDisableVertexAttribArray(distortionPosition);
         }
+    }
+    private void drawAlignment() {
+        for(int index=-4;index<=4;index++) {
+            if(index==0)continue;
+            flatQuad(index*.2f,0,0,.0015f,.8f,0xff344455);
+            flatQuad(0,index*.2f,0,.8f,.0015f,0xff344455);
+        }
+        flatQuad(0,0,0,.065f,.005f,0xff40ffb0);
+        flatQuad(0,0,0,.005f,.085f,0xff40ffb0);
+        drawCaption("Ein gemeinsames Kreuz einstellen",0,.58f,0,.78f,"title",true);
+        drawCaption(String.format(java.util.Locale.GERMAN,"Lauter / Leiser: Abstand %.1f mm",lensSpacingMm),0,-.47f,0,.78f,"label",true);
+        drawCaption("Zurück: speichern und Menü",0,-.7f,0,.72f,"label",true);
     }
     private Target findTarget(float x,float y,float z) {
         Target found=null;double best=-1;float[] direction={x,y,z};
