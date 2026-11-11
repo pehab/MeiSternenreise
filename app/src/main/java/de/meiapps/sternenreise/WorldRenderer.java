@@ -37,9 +37,19 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
     private static final int SMALL_JUG=21, LARGE_JUG=22, PUMP=23, GEAR=24, OIL=25, CLOCK=26, OWL=27;
     private static final int FOX=28, BEETLE=29, SEEDS=30, FERRY=31;
     private static final float LABEL_OFFSET=.48f;
-    // Visible bottom edges inside the padded atlas cells; +1 is the quad's bottom.
-    private static final float[] FOOT={.894f,.849f,.733f,.823f,.830f,.836f,.875f,.740f,
-        .862f,.862f,.701f,.772f,.772f,.727f,.894f,.842f};
+    // A support point refers to a painted surface, never to the sprite's center.
+    // Angles were inspected in all four panoramas (see docs/PLACEMENT.md).
+    private record Support(float yaw,float pitch,float distance) { }
+    private static final Support HOUSE_LUMI=new Support(-78,-42,3.5f), HOUSE_KEY=new Support(-65,-6,3.5f),
+        HOUSE_CHEST=new Support(48,-40,3.5f), HOUSE_NOTE=new Support(-158,-3,4), HOUSE_OWL=new Support(-43,-6,4),
+        GARDEN_LUMI=new Support(-99,-42,3.5f), GARDEN_PLANT=new Support(-62,-44,3.5f),
+        GARDEN_WATER=new Support(74,-44,3.5f), GARDEN_BAG=new Support(105,-34,4),
+        SMALL_CAN=new Support(-64,-44,3.5f), LARGE_CAN=new Support(64,-46,3.5f),
+        GARDEN_PUMP=new Support(98,-36,4), DEW_FLOWER=new Support(-43,-44,3.5f),
+        GARDEN_OIL=new Support(-71,-44,3.5f), GARDEN_GEAR=new Support(65,-45,3.5f),
+        OBS_LUMI=new Support(-122,-43,3.5f), OBS_OWL=new Support(-115,-16,4),
+        OBS_NOTE=new Support(160,-13,4), OBS_MACHINE=new Support(106,-13,4);
+    private final float[] spriteFeet=new float[32];
     private record Target(String id,String label,float x,float y,float z,boolean portal) { }
     private record Sprite(int cell,float x,float y,float z,float halfWidth,float halfHeight,boolean selected) { }
     private record Caption(int texture,float aspect) { }
@@ -287,37 +297,36 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
             });
             lastRoom=scene;fadeStart=SystemClock.uptimeMillis();yaw=0;pitch=0;tracker.center();gaze.requireNewLook();
         }
-        // Each location has its own supporting surface in the painted panorama.
-        float lumiFootPitch=switch(game.room()) {
-            case WORKSHOP -> -26;case GARDEN -> -26;case OBSERVATORY -> -21;
+        Support lumi=switch(game.room()) {
+            case WORKSHOP -> HOUSE_LUMI;case OBSERVATORY -> OBS_LUMI;
+            case GARDEN -> game.chapter()==4?new Support(game.boatSide()==0?-122:118,-10,4):GARDEN_LUMI;
         };
-        float lumiYaw=game.chapter()==4&&game.room()==Adventure.Room.GARDEN?(game.boatSide()==0?-145:145):-105;
-        supportedItem(game.introduced()?"hint":"begin",game.introduced()?"Lumi · Hilfe":"Lumi · Kapitel beginnen",LUMI,lumiYaw,lumiFootPitch,3.5f,.46f,.60f,false);
+        restingItem(game.introduced()?"hint":"begin",game.introduced()?"Lumi · Hilfe":"Lumi · Kapitel beginnen",LUMI,lumi,.46f,.60f,false);
         item("menu","Pause · Zum Menü",HOME,180,-25,3,.2f,.2f,true);
         if(game.chapter()>0)buildChapter();else switch(game.room()) {
             case WORKSHOP -> {
-                if(!game.hasKey())supportedItem("key","Goldener Schlüssel",KEY,-65,-12,3.5f,.27f,.4f,false);
-                supportedItem("chest",game.hasSeed()?"Geöffnete Truhe":"Kleine Truhe",game.hasSeed()?OPEN_CHEST:CHEST,64,-26,3.5f,.60f,.48f,false);
+                if(!game.hasKey())restingItem("key","Goldener Schlüssel",KEY,HOUSE_KEY,.30f,.40f,false);
+                restingItem("chest",game.hasSeed()?"Geöffnete Truhe":"Kleine Truhe",game.hasSeed()?OPEN_CHEST:CHEST,HOUSE_CHEST,.60f,.60f,false);
                 portal("garden","In den Mondgarten",72,-3);
             }
             case GARDEN -> {
                 int flowerSprite=game.watered()?FLOWER:game.planted()?SPROUT:POT;
                 // Grow upwards from the same stone rim, including transparent atlas padding.
                 float plantSize=game.watered()?.76f:.55f;
-                supportedItem(game.watered()?"flower":"pot",
+                restingItem(game.watered()?"flower":"pot",
                     game.watered()?(game.hasCrystal()?"Mondblume untersuchen":"Sternenkristall nehmen")
                         :game.planted()?"Kleiner Sprössling":"Mondensamen einpflanzen",
-                    flowerSprite,-70,-26,3.5f,plantSize,plantSize,false);
-                supportedItem("water","Gießkanne",WATERING_CAN,85,-27,3.5f,.53f,.52f,false);
+                    flowerSprite,GARDEN_PLANT,plantSize,plantSize,false);
+                restingItem("water","Gießkanne",WATERING_CAN,GARDEN_WATER,.53f,.53f,false);
                 portal("back","Zurück ins Haus",-131,-4);
-                portal("observatory","Zur Sternwarte",126,-2);
+                portal("observatory","Zur Sternwarte",130,5);
             }
             case OBSERVATORY -> {
                 String[] ids={"star","moon","sun"},names={"Stern","Mond","Sonne"};int[] cells={STAR,MOON,SUN};
-                for(int index=0;index<3;index++)item(ids[index],names[index],cells[index],(index-1)*16,-13,3.2f,.28f,.28f,game.symbols()>index);
-                supportedItem("machine",game.finished()?"Das Sternenlicht leuchtet!":"Sternenmaschine",game.finished()?LIT_MACHINE:MACHINE,
-                    106,-14,4,.75f,1,false);
-                portal("back","Zurück in den Garten",-156,-4);
+                for(int index=0;index<3;index++)restingItem(ids[index],names[index],cells[index],new Support((index-1)*20,-18,3.2f),.28f,.28f,game.symbols()>index);
+                restingItem("machine",game.finished()?"Das Sternenlicht leuchtet!":"Sternenmaschine",game.finished()?LIT_MACHINE:MACHINE,
+                    OBS_MACHINE,.78f,.78f,false);
+                portal("back","Zurück in den Garten",-152,-3);
             }
         }
         if(game.finished()&&game.chapter()<Adventure.CHAPTERS-1)item("next","Nächstes Kapitel",STAR,55,-12,3,.24f,.24f,true);
@@ -327,71 +336,72 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
     private void buildChapter(){
         if(!game.introduced())return;
         if(game.room()==Adventure.Room.WORKSHOP){
-            if(!game.hasKey())supportedItem("key","Silberner Federschlüssel",SILVER_KEY,-66,-16,3.5f,.28f,.4f,false);
-            supportedItem("chest",game.stage()>0?"Ausrüstungstruhe geöffnet":"Verschlossene Ausrüstungstruhe",game.stage()>0?OPEN_CHEST:CHEST,66,-26,3.5f,.6f,.48f,false);
-            item("clue","Nachricht untersuchen",SUN_MAIL,148,-3,4,.42f,.30f,false);
-            supportedItem("story","Post-Eule · Geschichte wiederholen",OWL,-146,-24,4,.35f,.45f,false);
+            if(!game.hasKey())restingItem("key","Silberner Federschlüssel",SILVER_KEY,HOUSE_KEY,.30f,.40f,false);
+            restingItem("chest",game.stage()>0?"Ausrüstungstruhe geöffnet":"Verschlossene Ausrüstungstruhe",game.stage()>0?OPEN_CHEST:CHEST,HOUSE_CHEST,.60f,.60f,false);
+            restingItem("clue","Nachricht untersuchen",SUN_MAIL,HOUSE_NOTE,.42f,.42f,false);
+            restingItem("story","Post-Eule · Geschichte wiederholen",OWL,HOUSE_OWL,.35f,.45f,false);
             portal("garden",game.chapter()==4?"Zum Fähranleger":"In den Mondgarten",72,-3);return;
         }
         if(game.room()==Adventure.Room.GARDEN){
-            item("clue",game.chapter()==4?"Fährregeln und Zeichenhinweis":"Gartenhinweis untersuchen",MOON_MAIL,160,-3,4,.42f,.3f,false);
-            portal("back","Zurück ins Haus",-131,-4);portal("observatory","Zur Sternwarte",126,-2);
+            item("clue",game.chapter()==4?"Fährregeln und Zeichenhinweis":"Gartenhinweis untersuchen",MOON_MAIL,game.chapter()==4?-110:-164,game.chapter()==4?14:4,4,.42f,.42f,false);
+            portal("back","Zurück ins Haus",game.chapter()==4?-101:-131,game.chapter()==4?10:-4);portal("observatory","Zur Sternwarte",game.chapter()==4?110:130,game.chapter()==4?10:5);
             switch(game.chapter()){
                 case 1 -> {
-                    supportedItem("sun","Sonnenpost einordnen",SUN_MAIL,-62,-24,3.8f,.4f,.3f,false);
-                    supportedItem("moon","Mondpost einordnen",MOON_MAIL,66,-24,3.8f,.4f,.3f,false);
-                    supportedItem("star","Sternenpost einordnen",STAR_MAIL,-148,-14,3.8f,.4f,.3f,false);
-                    supportedItem("inspect_bag","Mondpost",MAILBAG,95,-28,4,.42f,.45f,false);
+                    restingItem("sun","Sonnenpost einordnen",SUN_MAIL,new Support(-104,-10,3.8f),.28f,.28f,false);
+                    restingItem("moon","Mondpost einordnen",MOON_MAIL,new Support(-94,-10,3.8f),.28f,.28f,false);
+                    restingItem("star","Sternenpost einordnen",STAR_MAIL,new Support(-84,-10,3.8f),.28f,.28f,false);
+                    restingItem("inspect_bag","Mondpost",MAILBAG,GARDEN_BAG,.45f,.45f,false);
                 }
                 case 2 -> {
-                    supportedItem("select3","Kleine Kanne · "+game.jug3()+" / 3 Liter",SMALL_JUG,-65,-26,3.5f,.45f,.5f,game.cargo()==0);
-                    supportedItem("select5","Große Kanne · "+game.jug5()+" / 5 Liter",LARGE_JUG,65,-26,3.5f,.55f,.63f,game.cargo()==1);
-                    supportedItem("fill","Ausgewählte Kanne füllen",PUMP,106,-26,4,.42f,.67f,false);
+                    restingItem("select3","Kleine Kanne · "+game.jug3()+" / 3 Liter",SMALL_JUG,SMALL_CAN,.45f,.45f,game.cargo()==0);
+                    restingItem("select5","Große Kanne · "+game.jug5()+" / 5 Liter",LARGE_JUG,LARGE_CAN,.55f,.55f,game.cargo()==1);
+                    restingItem("fill","Ausgewählte Kanne füllen",PUMP,GARDEN_PUMP,.55f,.65f,false);
                     portal("empty","Ausgewählte Kanne leeren",-150,-12);
                     portal("pour","In die andere Kanne umgießen",145,-16);
-                    supportedItem("flower","Vier Liter an die Mondblume geben",FLOWER,-118,-26,3.5f,.62f,.72f,false);
+                    restingItem("flower","Vier Liter an die Mondblume geben",FLOWER,DEW_FLOWER,.65f,.65f,false);
                     portal("reset_puzzle","Beide Kannen leeren",-175,15);
                 }
                 case 3 -> {
-                    supportedItem("oil","Ölflasche nehmen",OIL,-70,-26,3.5f,.3f,.42f,false);
-                    supportedItem("repair","Zahnradachse pflegen",GEAR,65,-26,3.5f,.5f,.5f,false);
+                    restingItem("oil","Ölflasche nehmen",OIL,GARDEN_OIL,.32f,.40f,false);
+                    restingItem("repair","Zahnradachse pflegen",GEAR,GARDEN_GEAR,.5f,.5f,false);
                 }
                 default -> {
                     String[] names={"Lichtfuchs","Glühkäfer","Mondensamen"};int[] cells={FOX,BEETLE,SEEDS};
                     for(int i=0;i<3;i++){
                         boolean right=((game.banks()>>i)&1)==1;
-                        supportedItem("cargo_"+i,names[i]+(game.cargo()==i?" · ausgewählt":" einladen"),cells[i],right?80+i*20:-120+i*20,-27,4,.48f,.58f,game.cargo()==i);
+                        restingItem("cargo_"+i,names[i]+(game.cargo()==i?" · ausgewählt":" einladen"),cells[i],new Support(right?104+i*20:-145+i*20,-23,4),.48f,.58f,game.cargo()==i);
                     }
-                    supportedItem("cross","Fähre ablegen · höchstens ein Gast",FERRY,game.boatSide()==0?-42:42,-29,3.8f,.7f,.48f,false);
+                    restingItem("cross","Fähre ablegen · höchstens ein Gast",FERRY,new Support(game.boatSide()==0?-60:60,-25,3.8f),.7f,.7f,false);
                 }
             }
             return;
         }
-        item("clue","Sternenkarte untersuchen",STAR_MAIL,150,4,4,.42f,.3f,false);
-        supportedItem("story","Post-Eule · Geschichte",OWL,-140,-24,4,.35f,.45f,false);
-        portal("back","Zurück in den Garten",-156,-4);
+        restingItem("clue","Sternenkarte untersuchen",STAR_MAIL,OBS_NOTE,.42f,.42f,false);
+        restingItem("story","Post-Eule · Geschichte",OWL,OBS_OWL,.35f,.45f,false);
+        portal("back","Zurück in den Garten",-152,-3);
         if(game.chapter()==1||game.chapter()==4){
             int[] cells={STAR_MAIL,MOON_MAIL,SUN_MAIL};String[] ids={"star","moon","sun"},names={"Stern","Mond","Sonne"};
-            for(int i=0;i<3;i++)item(ids[i],names[i]+(game.chapter()==1?" · Briefkasten":" · Zeichen wählen"),cells[i],new float[]{-65,70,145}[i],-13,3.6f,.36f,.28f,false);
+            for(int i=0;i<3;i++)restingItem(ids[i],names[i]+(game.chapter()==1?" · Briefkasten":" · Zeichen wählen"),cells[i],new Support((i-1)*20,-18,3.6f),.36f,.36f,false);
         }
         if(game.chapter()==3){
-            for(int i=0;i<3;i++)item("lever_"+(char)('a'+i),new String[]{"Linker Hebel","Mittlerer Hebel","Rechter Hebel"}[i],GEAR,new float[]{-65,65,130}[i],-9,4,.33f,.4f,false);
-            for(int i=0;i<3;i++){
-                float angle=(i-1)*14,rad=(float)Math.toRadians(angle);
-                sprites.add(new Sprite(new int[]{STAR,MOON,SUN}[game.wheel(i)],(float)Math.sin(rad)*3.5f,-.5f,-(float)Math.cos(rad)*3.5f,.25f,.25f,false));
+            for(int i=0;i<3;i++) {
+                restingItem("lever_"+(char)('a'+i),new String[]{"Linker Hebel","Mittlerer Hebel","Rechter Hebel"}[i],GEAR,new Support((i-1)*20,-18,4),.33f,.40f,false);
+                // The current sign belongs on the gear face, rather than floating above the desk.
+                Sprite gear=sprites.get(sprites.size()-1);
+                sprites.add(new Sprite(new int[]{STAR,MOON,SUN}[game.wheel(i)],gear.x*.985f,gear.y+.03f,gear.z*.985f,.14f,.14f,false));
             }
             portal("reset_puzzle","Alle Zeiger auf Anfang",-175,15);
         }
-        supportedItem("machine",game.finished()?"Kapitel geschafft":game.chapter()==3?"Sternenuhr prüfen":"Sternenmaschine",game.chapter()==3?CLOCK:game.finished()?LIT_MACHINE:MACHINE,106,-14,4,.75f,1,false);
+        restingItem("machine",game.finished()?"Kapitel geschafft":game.chapter()==3?"Sternenuhr prüfen":"Sternenmaschine",game.chapter()==3?CLOCK:game.finished()?LIT_MACHINE:MACHINE,OBS_MACHINE,.78f,.78f,false);
     }
     private void portal(String id,String label,float yaw,float pitch) {target(id,label,yaw,pitch,5,true);}
     private void item(String id,String label,int cell,float yaw,float pitch,float distance,float halfWidth,float halfHeight,boolean selected) {
         Target target=target(id,label,yaw,pitch,distance,("menu".equals(id)||"next".equals(id)));
         sprites.add(new Sprite(cell,target.x,target.y,target.z,halfWidth,halfHeight,selected));
     }
-    private void supportedItem(String id,String label,int cell,float yaw,float footPitch,float distance,
+    private void restingItem(String id,String label,int cell,Support support,
                                float halfWidth,float halfHeight,boolean selected) {
-        Target center=target(id,label,yaw,footPitch,distance,false,halfHeight*(cell<16?FOOT[cell]:.88f));
+        Target center=target(id,label,support.yaw,support.pitch,support.distance,false,halfHeight*spriteFeet[cell]);
         sprites.add(new Sprite(cell,center.x,center.y,center.z,halfWidth,halfHeight,selected));
     }
     private Target target(String id,String label,float yaw,float pitch,float distance,boolean portal) {
@@ -428,6 +438,8 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
             BitmapFactory.Options options=new BitmapFactory.Options();options.inScaled=false;
             Bitmap bitmap=BitmapFactory.decodeStream(input,null,options);
             if(bitmap==null)throw new IOException("Invalid image: "+filename);
+            if("sprites.webp".equals(filename)||"chapter-sprites.webp".equals(filename))
+                measureSpriteFeet(bitmap,"sprites.webp".equals(filename)?0:16);
             int[] limit=new int[1];glGetIntegerv(GL_MAX_TEXTURE_SIZE,limit,0);
             if(bitmap.getWidth()>limit[0]||bitmap.getHeight()>limit[0]) {
                 float scale=Math.min((float)limit[0]/bitmap.getWidth(),(float)limit[0]/bitmap.getHeight());
@@ -436,6 +448,22 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
             }
             int texture=upload(bitmap);bitmap.recycle();return texture;
         }catch(IOException error){throw new IllegalStateException("Game artwork unavailable: "+filename,error);}
+    }
+    private void measureSpriteFeet(Bitmap bitmap,int offset) {
+        // Match the UV inset exactly, including fractional cells in a 1254px atlas.
+        // Every atlas gets its own measured alpha edge; letters and gears differ widely.
+        int width=bitmap.getWidth(),height=bitmap.getHeight();
+        int[] pixels=new int[width*height];bitmap.getPixels(pixels,0,width,0,0,width,height);
+        for(int cell=0;cell<16;cell++) {
+            float top=(cell/4)/4f+.001f,bottom=(cell/4+1)/4f-.001f;
+            int left=(int)Math.ceil(((cell%4)/4f+.001f)*width),right=(int)(((cell%4+1)/4f-.001f)*width);
+            float foot=1;
+            outer:for(int y=Math.min(height-1,(int)(bottom*height));y>=(int)Math.ceil(top*height);y--)
+                for(int x=left;x<=right;x++)if((pixels[y*width+x]>>>24)>=16) {
+                    foot=2*((y+.5f)/height-top)/(bottom-top)-1;break outer;
+                }
+            spriteFeet[offset+cell]=foot;
+        }
     }
     private static int upload(Bitmap bitmap) {
         int[] result=new int[1];glGenTextures(1,result,0);glBindTexture(GL_TEXTURE_2D,result[0]);textureParameters();
