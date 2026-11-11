@@ -42,3 +42,7 @@ Erneut mit der eingebauten Bildgenerierung erstellt und technisch als WebP für 
 - `app/src/main/assets/art/ferry.webp`: gemalte 2:1-Rundumansicht eines ruhigen Bachs im Mondgarten mit gegenüberliegenden steinernen Anlegern, Sternreflexen, Laternen, Haus links und separater Sternwarte rechts. Bildauftrag: derselbe weiche Bilderbuchstil, offener Himmel, freie Vordergrundflächen für die separaten Figuren und das Boot, keine Figuren oder Schrift im Hintergrund.
 
 Die zusätzlichen Atlaszellen verwenden in `WorldRenderer` die Nummern 16–31 in derselben Lesereihenfolge. Der Fährhintergrund wird im Garten des fünften Kapitels geladen.
+
+## Gegenstandspositionen 0.3.1
+
+Alle 32 Fußränder werden jetzt aus den tatsächlichen Alphakanälen und UV-Grenzen gemessen. Die gemalten Auflageflächen und gezielten Geräteansichten sind in [PLACEMENT.md](PLACEMENT.md) dokumentiert. Frühere pauschale Ablagehöhen und der gemeinsame Ersatzwert für die neuen Atlaszellen entfallen.

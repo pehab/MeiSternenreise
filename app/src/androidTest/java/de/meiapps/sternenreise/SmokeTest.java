@@ -49,19 +49,19 @@ public class SmokeTest {
         assertEquals(.0645f,instrumentation.getTargetContext().getSharedPreferences("adventure",0).getFloat("ipd",0),.00001f);
         instrumentation.getTargetContext().getSharedPreferences("adventure",0).edit().remove("vrScreenWidthMm").putFloat("ipd",.064f).apply();
         instrumentation.runOnMainSync(()->((MainActivity)activity).startGame(false));
-        SystemClock.sleep(600);
+        SystemClock.sleep(600);inspectScene(instrumentation,activity,"start");
         activate(instrumentation,activity,"key");activate(instrumentation,activity,"chest");
-        SystemClock.sleep(200);screenshot(instrumentation,"open-chest.png");
+        SystemClock.sleep(200);screenshot(instrumentation,"open-chest.png");inspectScene(instrumentation,activity,"open");
         activate(instrumentation,activity,"garden");
         assertEquals(Adventure.Room.GARDEN,saved(instrumentation).room());
-        SystemClock.sleep(600);screenshot(instrumentation,"garden.png");
+        SystemClock.sleep(600);screenshot(instrumentation,"garden.png");inspectScene(instrumentation,activity,"pot");
         activate(instrumentation,activity,"pot");
-        SystemClock.sleep(200);screenshot(instrumentation,"sprout.png");
+        SystemClock.sleep(200);screenshot(instrumentation,"sprout.png");inspectScene(instrumentation,activity,"sprout");
         activate(instrumentation,activity,"water");activate(instrumentation,activity,"flower");
-        SystemClock.sleep(300);screenshot(instrumentation,"flower.png");
+        SystemClock.sleep(300);screenshot(instrumentation,"flower.png");inspectScene(instrumentation,activity,"flower");
         activate(instrumentation,activity,"observatory");
         assertEquals(Adventure.Room.OBSERVATORY,saved(instrumentation).room());
-        SystemClock.sleep(600);screenshot(instrumentation,"observatory.png");
+        SystemClock.sleep(600);screenshot(instrumentation,"observatory.png");inspectScene(instrumentation,activity,"puzzle");
         activate(instrumentation,activity,"star");activate(instrumentation,activity,"moon");activate(instrumentation,activity,"sun");activate(instrumentation,activity,"machine");
         assertTrue(saved(instrumentation).finished());
         SystemClock.sleep(400);screenshot(instrumentation,"ending.png");
@@ -105,18 +105,63 @@ public class SmokeTest {
     private void completeNewChapters(Instrumentation i,Activity a) throws Exception {
         for(int chapter=1;chapter<Adventure.CHAPTERS;chapter++){
             activate(i,a,"next");assertEquals(chapter,saved(i).chapter());
-            activate(i,a,"begin");activate(i,a,"clue");activate(i,a,"key");activate(i,a,"chest");activate(i,a,"garden");activate(i,a,"clue");
-            SystemClock.sleep(600);screenshot(i,"chapter-"+(chapter+1)+".png");
+            activate(i,a,"begin");if(chapter==1)inspectScene(i,a,"start");activate(i,a,"clue");activate(i,a,"key");activate(i,a,"chest");activate(i,a,"garden");activate(i,a,"clue");
+            SystemClock.sleep(600);screenshot(i,"chapter-"+(chapter+1)+".png");inspectScene(i,a,"puzzle");
             String[] actions=switch(chapter){
                 case 1->new String[]{"sun","moon","star","observatory","clue","star","machine"};
                 case 2->new String[]{"select5","fill","pour","select3","empty","select5","pour","fill","pour","flower","observatory","clue","machine"};
                 case 3->new String[]{"oil","repair","observatory","clue","lever_a","lever_b","lever_b","lever_c","lever_c","machine"};
                 default->new String[]{"cargo_1","cross","cross","cargo_0","cross","cargo_1","cross","cargo_2","cross","cross","cargo_1","cross","observatory","clue","moon","star","sun","moon","machine"};
             };
-            for(String id:actions)activate(i,a,id);
+            for(String id:actions){
+                activate(i,a,id);
+                if("observatory".equals(id))inspectScene(i,a,"puzzle");
+                if(chapter==4&&"cross".equals(id)&&saved(i).banks()==7)inspectScene(i,a,"right-bank");
+            }
             assertTrue("Chapter "+chapter+" must be winnable",saved(i).finished());
         }
         assertTrue(saved(i).campaignFinished());SystemClock.sleep(400);screenshot(i,"campaign-ending.png");
+    }
+    private static Object field(Object object,String name) throws Exception {
+        java.lang.reflect.Field f=object.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(object);
+    }
+    private record Probe(String id,float x,float y,float z) { }
+    private void inspectScene(Instrumentation i,Activity a,String phase) throws Exception {
+        java.util.concurrent.atomic.AtomicReference<WorldRenderer> renderer=new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<android.opengl.GLSurfaceView> surface=new java.util.concurrent.atomic.AtomicReference<>();
+        i.runOnMainSync(()->{try{renderer.set((WorldRenderer)field(a,"renderer"));surface.set((android.opengl.GLSurfaceView)field(a,"surface"));}catch(Exception failure){throw new AssertionError(failure);}});
+        java.util.concurrent.FutureTask<java.util.List<Probe>> collect=new java.util.concurrent.FutureTask<>(()->{
+            java.util.List<Probe> result=new java.util.ArrayList<>();
+            for(Object target:(java.util.List<?>)field(renderer.get(),"targets")) {
+                String id=(String)field(target,"id");if(id.equals("menu")||id.equals("next"))continue;
+                result.add(new Probe(id,(float)field(target,"x"),(float)field(target,"y"),(float)field(target,"z")));
+            }
+            return result;
+        });
+        surface.get().queueEvent(collect);java.util.List<Probe> probes=collect.get(5,java.util.concurrent.TimeUnit.SECONDS);
+        Adventure state=saved(i);String prefix="layout-c"+(state.chapter()+1)+"-"+state.room().name().toLowerCase(java.util.Locale.ROOT)+"-"+phase+"-";
+        for(Probe probe:probes) {
+            java.util.concurrent.FutureTask<Void> aim=new java.util.concurrent.FutureTask<>(()->{
+                WorldRenderer r=renderer.get();
+                float azimuth=(float)Math.toDegrees(Math.atan2(probe.x,-probe.z));
+                float elevation=(float)Math.toDegrees(Math.atan2(probe.y,Math.hypot(probe.x,probe.z)));
+                r.look(azimuth-(float)field(r,"yaw"),-elevation-(float)field(r,"pitch"));r.resetGaze();
+                java.lang.reflect.Method hit=WorldRenderer.class.getDeclaredMethod("findTarget",float.class,float.class,float.class);hit.setAccessible(true);
+                float distance=(float)Math.sqrt(probe.x*probe.x+probe.y*probe.y+probe.z*probe.z);
+                Object target=hit.invoke(r,probe.x/distance,probe.y/distance,probe.z/distance);
+                assertNotNull("Visible object must be selectable: "+probe.id,target);
+                assertEquals("Object center must select this object: "+probe.id,probe.id,field(target,"id"));
+                return null;
+            });
+            surface.get().queueEvent(aim);aim.get(5,java.util.concurrent.TimeUnit.SECONDS);SystemClock.sleep(180);
+            Bitmap image=i.getUiAutomation().takeScreenshot();assertNotNull(image);
+            Bitmap small=Bitmap.createScaledBitmap(image,1280,Math.round(1280f*image.getHeight()/image.getWidth()),true);
+            try(FileOutputStream out=new FileOutputStream(new File(i.getTargetContext().getExternalFilesDir(null),prefix+probe.id+".png"))){assertTrue(small.compress(Bitmap.CompressFormat.PNG,100,out));}
+            if(small!=image)small.recycle();image.recycle();
+        }
+        java.util.concurrent.FutureTask<Void> center=new java.util.concurrent.FutureTask<>(()->{
+            WorldRenderer r=renderer.get();r.look(-(float)field(r,"yaw"),-(float)field(r,"pitch"));r.resetGaze();return null;
+        });surface.get().queueEvent(center);center.get(5,java.util.concurrent.TimeUnit.SECONDS);
     }
     private void checkAlignment(Instrumentation instrumentation){
         Bitmap image=instrumentation.getUiAutomation().takeScreenshot();assertNotNull(image);

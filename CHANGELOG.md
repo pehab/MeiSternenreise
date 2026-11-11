@@ -1,3 +1,10 @@
+# 0.3.1
+
+- Gegenstandspositionen in allen fünf Kapiteln auf Boden, Werkbank, Gartenbank, Pult, Sockel und Fähranleger abgestimmt. Truhe und Lumi stehen nicht mehr vor Möbeln in der Luft.
+- Sichtbare Unterkante jeder der 32 Grafiken wird aus dem Alphakanal gemessen; offene/geschlossene Truhe und Pflanzenstufen behalten ihren Auflagepunkt.
+- Briefe, Rätselzeichen, Uhrhebel, Figuren und beide Fähranleger bekommen passende Plätze; Eule und Sternenmaschine stehen auf ihren Ablagen.
+- Gerätetest fotografiert die einzelnen Blickziele in allen Kapiteln und prüft, dass ihr sichtbares Zentrum sie auch auswählt. Spielstände bleiben erhalten.
+
 # 0.3.0
 
 - Bis zu acht getrennte Spielerprofile mit eigenen Geschichten und Kapitelständen; vorhandener Spielstand wird als erstes Profil übernommen.

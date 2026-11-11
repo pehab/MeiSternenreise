@@ -17,5 +17,9 @@ grep -Eq 'OK \([0-9]+ tests?\)' device-results/instrumentation.txt
 for image in menu phone stereo alignment open-chest garden sprout flower observatory ending chapter-2 chapter-3 chapter-4 chapter-5 campaign-ending; do
   adb shell test -f "/sdcard/Android/data/de.meiapps.sternenreise/files/$image.png"
 done
+# Inspect real object directions in every chapter, including both ferry banks.
+for image in layout-c1-workshop-start-chest layout-c2-workshop-start-clue layout-c2-garden-puzzle-sun layout-c3-garden-puzzle-fill layout-c4-observatory-puzzle-lever_a layout-c5-garden-right-bank-cargo_0; do
+  adb shell test -f "/sdcard/Android/data/de.meiapps.sternenreise/files/$image.png"
+done
 adb logcat -d > device-results/logcat.txt
 if grep -E 'FATAL EXCEPTION|Fatal signal' device-results/logcat.txt; then exit 1; fi
