@@ -47,3 +47,11 @@ Spielstand und Einstellungen bleiben auf dem Gerät. Keine Werbung, Analyse, Mik
 ## Grafiken
 
 Gemalte Hintergründe und Gegenstände sind vollständig in der APK enthalten. Es werden beim Spielen keine Bilder heruntergeladen. Dateipfade, Atlasbelegung, Bildbeschreibungen und technische Grenzen sind in [docs/ART.md](docs/ART.md) dokumentiert.
+
+## VR-Ausrichtung ab 0.2.2
+
+Bei Doppelbildern zuerst **VR-Bild ausrichten** im Menü wählen und das Handy während des Countdowns in die Brille legen. Mit **Lauter / Leiser** den Abstand der Bildmitten einstellen, bis die beiden grünen Kreuze durch die Brille zusammenpassen. Android-Zurück speichert den Wert und öffnet das Menü. Im eigentlichen Spiel richten die Lautstärketasten weiterhin den Blick neu aus.
+
+Unter **Einstellungen & Ton** lassen sich der Abstand der Bildmitten, die tatsächliche Displaybreite im Querformat (sichtbare Leuchtfläche ohne Gehäuserand), ein vertikaler Versatz und die manuelle Linsenkorrektur einstellen. Die Displaybreite wird zunächst aus den gemeldeten Displaydaten geschätzt; falsche Dichteangaben eines Handys können eine manuelle Korrektur erfordern. Ein vollständiges QR-Brillenprofil wird weiterhin nicht verwendet. Die Einstellungen ersetzen daher keine individuelle Prüfung durch die echte Brille.
+
+Die Sensorverarbeitung behandelt Androids Matrizen ausdrücklich als Zeilenformat und gibt eine spaltenorientierte OpenGL-Ansicht zurück. Bildschirmdrehung und Neuzentrierung werden vor der relativen Kopfbewegung berücksichtigt. Tests prüfen getrennte Gier-, Nick- und Rollbewegungen, alle vier Displaydrehungen und neue Referenzposen. Der Emulator prüft außerdem die Lage beider Ausrichtungskreuze auf dem gerenderten Bildschirm. Ob sich das Bild durch eine konkrete Brille angenehm vereinigen lässt, kann nur am Gerät geprüft werden.

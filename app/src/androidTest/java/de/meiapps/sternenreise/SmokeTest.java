@@ -39,6 +39,13 @@ public class SmokeTest {
         assertFalse(activity.isFinishing());screenshot(instrumentation,"phone.png");
         instrumentation.runOnMainSync(()->((MainActivity)activity).startGame(true));
         SystemClock.sleep(900);instrumentation.waitForIdleSync();screenshot(instrumentation,"stereo.png");
+        instrumentation.getTargetContext().getSharedPreferences("adventure",0).edit().putFloat("vrScreenWidthMm",150).putFloat("ipd",.064f).putFloat("vrVerticalMm",0).commit();
+        instrumentation.runOnMainSync(()->((MainActivity)activity).startCalibration());
+        SystemClock.sleep(2000);instrumentation.waitForIdleSync();
+        checkAlignment(instrumentation);screenshot(instrumentation,"alignment.png");
+        instrumentation.runOnMainSync(()->activity.onKeyDown(android.view.KeyEvent.KEYCODE_VOLUME_UP,new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN,android.view.KeyEvent.KEYCODE_VOLUME_UP)));
+        assertEquals(.0645f,instrumentation.getTargetContext().getSharedPreferences("adventure",0).getFloat("ipd",0),.00001f);
+        instrumentation.getTargetContext().getSharedPreferences("adventure",0).edit().remove("vrScreenWidthMm").putFloat("ipd",.064f).apply();
         instrumentation.runOnMainSync(()->((MainActivity)activity).startGame(false));
         SystemClock.sleep(600);
         activate(instrumentation,activity,"key");activate(instrumentation,activity,"chest");
@@ -61,6 +68,22 @@ public class SmokeTest {
         SystemClock.sleep(300);screenshot(instrumentation,"menu.png");
         instrumentation.runOnMainSync(activity::recreate);instrumentation.waitForIdleSync();
         assertTrue(saved(instrumentation).finished());
+    }
+    private void checkAlignment(Instrumentation instrumentation){
+        Bitmap image=instrumentation.getUiAutomation().takeScreenshot();assertNotNull(image);
+        assertTrue("VR surface must remain landscape",image.getWidth()>image.getHeight());
+        double[] sumX=new double[2],sumY=new double[2];int[] count=new int[2];
+        for(int y=0;y<image.getHeight();y++)for(int x=0;x<image.getWidth();x++){
+            int color=image.getPixel(x,y);
+            if(android.graphics.Color.green(color)>225&&android.graphics.Color.red(color)<110&&android.graphics.Color.blue(color)>120){
+                int eye=x<image.getWidth()/2?0:1;sumX[eye]+=x;sumY[eye]+=y;count[eye]++;
+            }
+        }
+        assertTrue("Both optical-center crosses must be visible",count[0]>20&&count[1]>20);
+        assertEquals("Same vertical optical axis",sumY[0]/count[0],sumY[1]/count[1],2);
+        double relativeDistance=(sumX[1]/count[1]-sumX[0]/count[0])/image.getWidth();
+        assertEquals("64 mm lenses on a 150 mm screen",64.0/150,relativeDistance,.004);
+        image.recycle();
     }
     private Adventure saved(Instrumentation instrumentation) {
         return Adventure.restore(instrumentation.getTargetContext().getSharedPreferences("adventure",0).getString("state",""));

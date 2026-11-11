@@ -1,3 +1,10 @@
+# 0.2.2
+
+- Kopfsteuerung korrigiert: Android-Sensormatrizen werden vor der OpenGL-Berechnung vom Zeilen- ins Spaltenformat konvertiert. Querformat, umgekehrtes Querformat und neue Blickmitte verwenden dieselbe lokale Kamerabasis.
+- Die Bildmitten folgen jetzt dem physischen Linsenabstand auf dem Display. Bisher lagen sie unabhängig von der Einstellung fest bei einem Viertel und drei Vierteln der Bildschirmbreite.
+- „VR-Bild ausrichten“ zeigt zwei grüne Kreuze; Lauter/Leiser ändern und speichern dort den Bildmittenabstand. Einstellungen bieten zusätzlich Displaybreite und vertikale Bildmittenkorrektur.
+- Sensorregressionstests für alle Bildschirmdrehungen und GPU-Prüfung der tatsächlich gerenderten optischen Bildmitten.
+
 # 0.2.1
 
 - Lumi, Schlüssel und Truhe stehen auf den gemalten Ablagen statt vor den Möbeln zu schweben.
