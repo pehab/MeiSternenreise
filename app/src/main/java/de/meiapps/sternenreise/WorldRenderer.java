@@ -291,7 +291,7 @@ final class WorldRenderer implements GLSurfaceView.Renderer {
         float lumiFootPitch=switch(game.room()) {
             case WORKSHOP -> -26;case GARDEN -> -26;case OBSERVATORY -> -21;
         };
-        float lumiYaw=game.chapter()==4&&game.room()==Room.GARDEN?(game.boatSide()==0?-145:145):-105;
+        float lumiYaw=game.chapter()==4&&game.room()==Adventure.Room.GARDEN?(game.boatSide()==0?-145:145):-105;
         supportedItem(game.introduced()?"hint":"begin",game.introduced()?"Lumi · Hilfe":"Lumi · Kapitel beginnen",LUMI,lumiYaw,lumiFootPitch,3.5f,.46f,.60f,false);
         item("menu","Pause · Zum Menü",HOME,180,-25,3,.2f,.2f,true);
         if(game.chapter()>0)buildChapter();else switch(game.room()) {
