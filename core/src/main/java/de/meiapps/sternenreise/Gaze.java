@@ -6,7 +6,11 @@ public final class Gaze {
     private String target;
     private long start;
     private boolean fired;
+    private boolean needsNewLook;
+    public void requireNewLook(){reset();needsNewLook=true;}
+    public boolean needsNewLook(){return needsNewLook;}
     public boolean update(String id, long now) {
+        if(needsNewLook){if(id==null)needsNewLook=false;return false;}
         if (id == null) { reset(); return false; }
         if (!id.equals(target)) { target=id; start=now; fired=false; }
         if (now < start) { start=now; fired=false; }

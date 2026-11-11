@@ -30,12 +30,14 @@ public class SmokeTest {
     }
     @Test public void rendersEveryLocationAndCompletesAdventureInBothModes() throws Exception {
         Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
+        instrumentation.getTargetContext().getSharedPreferences("adventure",0).edit().clear().commit();
         Activity activity=instrumentation.startActivitySync(new Intent(instrumentation.getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         instrumentation.waitForIdleSync();assertNotNull(activity);
         instrumentation.runOnMainSync(()->{
             Button play=find(activity.getWindow().getDecorView(),"Am Handy spielen");assertNotNull(play);play.performClick();
         });
-        SystemClock.sleep(1400);instrumentation.waitForIdleSync();
+        SystemClock.sleep(3300);instrumentation.waitForIdleSync();
+        assertFalse("Looking forward must not collect the hidden key",saved(instrumentation).hasKey());
         assertFalse(activity.isFinishing());screenshot(instrumentation,"phone.png");
         instrumentation.runOnMainSync(()->((MainActivity)activity).startGame(true));
         SystemClock.sleep(900);instrumentation.waitForIdleSync();screenshot(instrumentation,"stereo.png");
@@ -63,11 +65,58 @@ public class SmokeTest {
         activate(instrumentation,activity,"star");activate(instrumentation,activity,"moon");activate(instrumentation,activity,"sun");activate(instrumentation,activity,"machine");
         assertTrue(saved(instrumentation).finished());
         SystemClock.sleep(400);screenshot(instrumentation,"ending.png");
+        completeNewChapters(instrumentation,activity);
         instrumentation.runOnMainSync(activity::onBackPressed);instrumentation.waitForIdleSync();
         instrumentation.runOnMainSync(()->assertNotNull(find(activity.getWindow().getDecorView(),"Am Handy spielen")));
         SystemClock.sleep(300);screenshot(instrumentation,"menu.png");
+        profileRoundTrip(instrumentation,activity);
         instrumentation.runOnMainSync(activity::recreate);instrumentation.waitForIdleSync();
         assertTrue(saved(instrumentation).finished());
+    }
+    private void profileRoundTrip(Instrumentation i,Activity a){
+        i.runOnMainSync(()->{Button profile=find(a.getWindow().getDecorView(),"Profil wechseln · Spieler 1");assertNotNull(profile);profile.performClick();});
+        clickText(i,"Neues Profil");
+        android.view.accessibility.AccessibilityNodeInfo root=i.getUiAutomation().getRootInActiveWindow();
+        android.view.accessibility.AccessibilityNodeInfo input=findClass(root,"android.widget.EditText");assertNotNull(input);
+        android.os.Bundle arguments=new android.os.Bundle();arguments.putCharSequence(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,"Testkind");
+        assertTrue(input.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT,arguments));clickText(i,"Speichern");
+        PlayerProfiles profiles=profileData(i);assertEquals(2,profiles.all().size());assertEquals("Testkind",profiles.active().name());assertFalse(saved(i).hasKey());
+        i.runOnMainSync(()->((MainActivity)a).startGame(false));SystemClock.sleep(500);activate(i,a,"key");assertTrue(saved(i).hasKey());
+        i.runOnMainSync(a::onBackPressed);i.waitForIdleSync();
+        i.runOnMainSync(()->find(a.getWindow().getDecorView(),"Profil wechseln · Testkind").performClick());clickText(i,"Spieler 1");
+        assertTrue(saved(i).campaignFinished());assertEquals("Spieler 1",profileData(i).active().name());
+        for(PlayerProfiles.Profile player:profileData(i).all())if(player.name().equals("Testkind"))assertTrue(Adventure.restore(player.state()).hasKey());
+    }
+    private PlayerProfiles profileData(Instrumentation i){android.content.SharedPreferences prefs=i.getTargetContext().getSharedPreferences("adventure",0);return PlayerProfiles.restore(prefs.getString("profiles",null),prefs.getString("state",""));}
+    private android.view.accessibility.AccessibilityNodeInfo findClass(android.view.accessibility.AccessibilityNodeInfo node,String name){
+        if(node==null)return null;if(name.contentEquals(node.getClassName()))return node;
+        for(int index=0;index<node.getChildCount();index++){android.view.accessibility.AccessibilityNodeInfo found=findClass(node.getChild(index),name);if(found!=null)return found;}return null;
+    }
+    private void clickText(Instrumentation i,String text){
+        long deadline=SystemClock.uptimeMillis()+4000;
+        while(SystemClock.uptimeMillis()<deadline){
+            android.view.accessibility.AccessibilityNodeInfo root=i.getUiAutomation().getRootInActiveWindow();
+            if(root!=null)for(android.view.accessibility.AccessibilityNodeInfo node:root.findAccessibilityNodeInfosByText(text)){
+                for(int depth=0;node!=null&&depth<5;depth++,node=node.getParent())if(node.isClickable()&&node.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)){SystemClock.sleep(250);i.waitForIdleSync();return;}
+            }
+            SystemClock.sleep(50);
+        }fail("Missing dialog action: "+text);
+    }
+    private void completeNewChapters(Instrumentation i,Activity a) throws Exception {
+        for(int chapter=1;chapter<Adventure.CHAPTERS;chapter++){
+            activate(i,a,"next");assertEquals(chapter,saved(i).chapter());
+            activate(i,a,"begin");activate(i,a,"clue");activate(i,a,"key");activate(i,a,"chest");activate(i,a,"garden");activate(i,a,"clue");
+            SystemClock.sleep(600);screenshot(i,"chapter-"+(chapter+1)+".png");
+            String[] actions=switch(chapter){
+                case 1->new String[]{"sun","moon","star","observatory","clue","star","machine"};
+                case 2->new String[]{"select5","fill","pour","select3","empty","select5","pour","fill","pour","flower","observatory","clue","machine"};
+                case 3->new String[]{"oil","repair","observatory","clue","lever_a","lever_b","lever_b","lever_c","lever_c","machine"};
+                default->new String[]{"cargo_1","cross","cross","cargo_0","cross","cargo_1","cross","cargo_2","cross","cross","cargo_1","cross","observatory","clue","moon","star","sun","moon","machine"};
+            };
+            for(String id:actions)activate(i,a,id);
+            assertTrue("Chapter "+chapter+" must be winnable",saved(i).finished());
+        }
+        assertTrue(saved(i).campaignFinished());SystemClock.sleep(400);screenshot(i,"campaign-ending.png");
     }
     private void checkAlignment(Instrumentation instrumentation){
         Bitmap image=instrumentation.getUiAutomation().takeScreenshot();assertNotNull(image);
@@ -86,7 +135,8 @@ public class SmokeTest {
         image.recycle();
     }
     private Adventure saved(Instrumentation instrumentation) {
-        return Adventure.restore(instrumentation.getTargetContext().getSharedPreferences("adventure",0).getString("state",""));
+        android.content.SharedPreferences prefs=instrumentation.getTargetContext().getSharedPreferences("adventure",0);
+        return Adventure.restore(PlayerProfiles.restore(prefs.getString("profiles",null),prefs.getString("state","")).active().state());
     }
     private void activate(Instrumentation instrumentation,Activity activity,String action) {
         String before=saved(instrumentation).save();

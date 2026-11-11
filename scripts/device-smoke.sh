@@ -14,7 +14,7 @@ adb shell settings put secure immersive_mode_confirmations confirmed
 adb logcat -c
 adb shell am instrument -w de.meiapps.sternenreise.test/androidx.test.runner.AndroidJUnitRunner | tee device-results/instrumentation.txt
 grep -Eq 'OK \([0-9]+ tests?\)' device-results/instrumentation.txt
-for image in menu phone stereo alignment open-chest garden sprout flower observatory ending; do
+for image in menu phone stereo alignment open-chest garden sprout flower observatory ending chapter-2 chapter-3 chapter-4 chapter-5 campaign-ending; do
   adb shell test -f "/sdcard/Android/data/de.meiapps.sternenreise/files/$image.png"
 done
 adb logcat -d > device-results/logcat.txt

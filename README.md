@@ -1,6 +1,6 @@
 # MeiSternenreise
 
-Ein kleines Android-Abenteuer für Papp-VR-Brillen und zum Ausprobieren am Handy. Hilf Lumi, das verschwundene Sternenlicht zurückzubringen. Drei Räume, Blicksteuerung und einfache Rätsel ohne Zeitdruck.
+Ein kleines Android-Abenteuer für Papp-VR-Brillen und zum Ausprobieren am Handy. Hilf Lumi, das verschwundene Sternenlicht zurückzubringen. Fünf zusammenhängende Kapitel, getrennte Spielerprofile und zunehmend knifflige Rätsel ohne Zeitdruck.
 
 ## Spielen
 
@@ -8,7 +8,7 @@ Ein kleines Android-Abenteuer für Papp-VR-Brillen und zum Ausprobieren am Handy
 - **Mit VR-Brille:** Bewegungssensor erforderlich. Nach dem Start fünf Sekunden Zeit, das Handy in die Brille zu legen. Kopf drehen, Gegenstände anschauen, Türen benutzen. Keine künstliche Fortbewegung oder Kamerafahrten; Raumwechsel werden abgeblendet.
 - **Pause:** Hinter dir befindet sich eine mit „Pause“ beschriftete Fläche. Android-Zurück öffnet ebenfalls das Menü. Lautstärketasten richten im VR-Modus den Blick neu aus.
 - **Hinweise:** Lumi anschauen. Alle Hinweise erscheinen als Text; eine installierte deutsche Android-TTS-Stimme liest sie auf Wunsch vor. Die App bevorzugt eine verfügbare Offline-Stimme.
-- Fortschritt wird nach jeder Aktion lokal gespeichert. „Abenteuer neu starten“ setzt ihn nach Rückfrage zurück.
+- Fortschritt wird nach jeder Aktion lokal gespeichert. „Kapitel neu starten“ setzt nach Rückfrage nur das aktuelle Kapitel zurück.
 
 ## Erstes Abenteuer
 
@@ -55,3 +55,21 @@ Bei Doppelbildern zuerst **VR-Bild ausrichten** im Menü wählen und das Handy w
 Unter **Einstellungen & Ton** lassen sich der Abstand der Bildmitten, die tatsächliche Displaybreite im Querformat (sichtbare Leuchtfläche ohne Gehäuserand), ein vertikaler Versatz und die manuelle Linsenkorrektur einstellen. Die Displaybreite wird zunächst aus den gemeldeten Displaydaten geschätzt; falsche Dichteangaben eines Handys können eine manuelle Korrektur erfordern. Ein vollständiges QR-Brillenprofil wird weiterhin nicht verwendet. Die Einstellungen ersetzen daher keine individuelle Prüfung durch die echte Brille.
 
 Die Sensorverarbeitung behandelt Androids Matrizen ausdrücklich als Zeilenformat und gibt eine spaltenorientierte OpenGL-Ansicht zurück. Bildschirmdrehung und Neuzentrierung werden vor der relativen Kopfbewegung berücksichtigt. Tests prüfen getrennte Gier-, Nick- und Rollbewegungen, alle vier Displaydrehungen und neue Referenzposen. Der Emulator prüft außerdem die Lage beider Ausrichtungskreuze auf dem gerenderten Bildschirm. Ob sich das Bild durch eine konkrete Brille angenehm vereinigen lässt, kann nur am Gerät geprüft werden.
+
+## Spielerprofile und fünf Kapitel ab 0.3.0
+
+Im Menü über **Profil wechseln** eine eigene Geschichte auswählen oder ein neues Profil anlegen (bis zu acht). Jedes Profil merkt sich alle Kapitel, besuchte Hinweise, Gegenstände und laufende Rätsel. Beim Update wird der alte einzelne Spielstand einmalig als **Spieler 1** übernommen. Namen lassen sich ändern; ein Profil kann nach Bestätigung mitsamt seiner Geschichte gelöscht werden. Mindestens ein Profil bleibt erhalten. VR-Ausrichtung und Ton sind Geräteeinstellungen und werden durch den Profilwechsel nicht umgestellt.
+
+**Kapitel auswählen** öffnet bereits freigeschaltete Kapitel, ohne den Zwischenstand anderer Kapitel zu überschreiben. **Kapitel neu starten** beginnt nur das aktuelle Kapitel neu; spätere Freischaltungen bleiben erhalten.
+
+1. Das verlorene Sternenlicht — ursprüngliche Einführung mit Werkstatt, Garten und Sternwarte.
+2. Die verschwundene Mondpost — Hinweise finden, drei Briefe logisch sortieren und ihren Empfänger bestimmen.
+3. Der Garten ohne Tau — mit Drei- und Fünf-Liter-Kannen genau vier Liter abmessen. Kanne auswählen, dann Pumpe, Leeren oder Umgießen anschauen.
+4. Das Räderwerk der Sternenuhr — Ausrüstung kombinieren und gekoppelte Zeiger mit drei Hebeln auf einen gemeinsamen Zielzustand einstellen.
+5. Die Nacht der fünf Sterne — Fuchs, Käfer und Samen mit begrenzter Fährkapazität sicher übersetzen, danach Hinweise aus mehreren Orten zu einem vierteiligen Zeichen verbinden.
+
+Neue Kapitel beginnen bei Lumi. Die Post-Eule wiederholt die Geschichte. Lumi gibt Tipps in drei Stufen: Ziel, Regel und erst auf weiteres Nachfragen einen konkreteren Ansatz. Es gibt keine Zeitbegrenzung und keine Strafe für einen falschen Versuch.
+
+Gegenstände liegen bewusst abseits der ersten Blickrichtung. Beim Betreten eines Ortes und nach einer Aktion braucht die Blickauswahl zunächst einen Blick ins Freie. Erst gezieltes erneutes Anschauen startet den Auswahlkreis; ein neu auftauchendes Objekt wird dadurch nicht automatisch mit ausgelöst.
+
+Die vollständigen Rätselregeln, Speicherformate und Lösungen für Entwicklung und Tests stehen in [docs/STORY.md](docs/STORY.md).
