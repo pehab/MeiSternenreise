@@ -33,3 +33,12 @@ Blickziele für die Übergänge sind auf die sichtbaren Türen und Gebäude abge
 ## Auflagepunkte ab 0.2.1
 
 Gegenstände auf gemalten Flächen werden an der sichtbaren Unterkante ihrer Atlaszelle verankert. `FOOT` im Renderer berücksichtigt den transparenten Rand pro Zelle. Der angegebene Winkel beschreibt die Auflagefläche im Panorama; die Bildmitte und das Blickziel werden um den sichtbaren Fußabstand angehoben. Dadurch bleiben Truhenboden und Topfboden beim Wechsel des Bildes fest. Topf und Sprössling verwenden dieselbe Größe; die Blume wächst mit größerer quadratischer Darstellung nach oben. Werkstatt und Sternwarte haben eigene Ablagehöhen für Lumi. Der freie Bildschirmbereich unterhalb der Bildmitte bleibt für die Gegenstände reserviert, Hinweise sitzen im oberen Bereich unter dem kompakten Titel.
+
+## Ergänzungen 0.3.0
+
+Erneut mit der eingebauten Bildgenerierung erstellt und technisch als WebP für die Offline-APK konvertiert:
+
+- `app/src/main/assets/art/chapter-sprites.webp`: transparenter 4×4-Bilderbuchatlas mit Federschlüssel, Postbeutel, Sonnen-/Mond-/Sternenbrief, kleiner und großer Keramikkanne, Handpumpe, Zahnrad, Ölflasche, Sternenuhr, mechanischer Eule, freundlichem Lichtfuchs, Glühkäfer, Samenbeutel und Laternenfähre. Bildauftrag: detaillierte runde Formen in Messing, Türkis und warmem Gold, jedes Motiv vollständig in einer gleich großen Zelle, keine Schrift oder eingebrannten Zahlen.
+- `app/src/main/assets/art/ferry.webp`: gemalte 2:1-Rundumansicht eines ruhigen Bachs im Mondgarten mit gegenüberliegenden steinernen Anlegern, Sternreflexen, Laternen, Haus links und separater Sternwarte rechts. Bildauftrag: derselbe weiche Bilderbuchstil, offener Himmel, freie Vordergrundflächen für die separaten Figuren und das Boot, keine Figuren oder Schrift im Hintergrund.
+
+Die zusätzlichen Atlaszellen verwenden in `WorldRenderer` die Nummern 16–31 in derselben Lesereihenfolge. Der Fährhintergrund wird im Garten des fünften Kapitels geladen.

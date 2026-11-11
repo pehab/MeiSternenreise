@@ -18,6 +18,7 @@ import java.util.Locale;
 public final class MainActivity extends Activity implements WorldRenderer.Events {
     private static final String REPOSITORY="pehab/MeiSternenreise";
     private Adventure game;
+    private PlayerProfiles profiles;
     private HeadTracker tracker;
     private GLSurfaceView surface;
     private WorldRenderer renderer;
@@ -26,9 +27,10 @@ public final class MainActivity extends Activity implements WorldRenderer.Events
     private boolean speakingReady,foreground,inGame,vr,returnToMenu,calibration;
     private android.content.SharedPreferences prefs;
     private float previousX,previousY;
+    private long storyEpoch;
     private final Handler handler=new Handler(Looper.getMainLooper());
     @Override public void onCreate(Bundle state){
-        super.onCreate(state);prefs=getSharedPreferences("adventure",MODE_PRIVATE);game=Adventure.restore(prefs.getString("state",""));tracker=new HeadTracker(this);
+        super.onCreate(state);prefs=getSharedPreferences("adventure",MODE_PRIVATE);profiles=PlayerProfiles.restore(prefs.getString("profiles",null),prefs.getString("state",""));game=Adventure.restore(profiles.active().state());persistProfiles();tracker=new HeadTracker(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         if(Build.VERSION.SDK_INT>=28){WindowManager.LayoutParams attributes=getWindow().getAttributes();attributes.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;getWindow().setAttributes(attributes);}
         speech=new TextToSpeech(this,status->{if(status==TextToSpeech.SUCCESS){
@@ -48,9 +50,11 @@ public final class MainActivity extends Activity implements WorldRenderer.Events
         GradientDrawable bg=new GradientDrawable();bg.setColor(0xfff5d48b);bg.setCornerRadius(dp(14));b.setBackground(bg);b.setPadding(dp(18),dp(5),dp(18),dp(5));
         LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,dp(48));p.bottomMargin=dp(10);b.setLayoutParams(p);b.setOnClickListener(v->action.run());return b;}
     private void stopGame(){
+        storyEpoch++;
         tracker.stop();handler.removeCallbacksAndMessages(null);if(speech!=null)speech.stop();
         if(surface!=null){surface.onPause();surface=null;renderer=null;}
         inGame=false;calibration=false;
+        if(profiles!=null&&game!=null)save();
     }
     private void showMenu(){
         stopGame();immersive();
@@ -59,18 +63,21 @@ public final class MainActivity extends Activity implements WorldRenderer.Events
         LinearLayout story=new LinearLayout(this);story.setOrientation(LinearLayout.VERTICAL);story.setPadding(0,0,dp(32),0);row.addView(story,new LinearLayout.LayoutParams(0,-2,1));
         story.addView(text("MEIAPPS  /  EIN KLEINES VR-ABENTEUER",11,0xff8edbd6));
         TextView title=text("MeiSternenreise",34,0xffffdf9d);title.setTypeface(null,Typeface.BOLD);story.addView(title);
-        TextView subtitle=text("Das Geheimnis der\nSternenwerkstatt",22,0xfff1f0ec);subtitle.setPadding(0,dp(10),0,dp(10));story.addView(subtitle);
+        TextView subtitle=text(game.chapterTitle(),22,0xfff1f0ec);subtitle.setPadding(0,dp(10),0,dp(10));story.addView(subtitle);
         story.addView(text("Hilf Lumi, das Sternenlicht zurückzubringen.\nUmschauen. Entdecken. Kleine Rätsel lösen.",15,0xffb8c7d8));
-        TextView status=text(game.finished()?"★ Das Sternenlicht leuchtet wieder!":"Dein Spielstand: "+game.title(),13,0xff8edbd6);status.setPadding(0,dp(16),0,0);story.addView(status);
+        TextView status=text(profiles.active().name()+" · Kapitel "+(game.chapter()+1)+" / "+Adventure.CHAPTERS+"\n"+(game.campaignFinished()?"★ Alle fünf Sterne leuchten!":game.finished()?"★ Kapitel geschafft":game.title()),13,0xff8edbd6);status.setPadding(0,dp(16),0,0);story.addView(status);
         ScrollView scroll=new ScrollView(this);row.addView(scroll,new LinearLayout.LayoutParams(dp(280),-1));LinearLayout controls=new LinearLayout(this);controls.setPadding(0,dp(12),0,0);controls.setOrientation(LinearLayout.VERTICAL);scroll.addView(controls);
+        controls.addView(button("Profil wechseln · "+profiles.active().name(),this::chooseProfile));
+        controls.addView(button("Kapitel auswählen",this::chooseChapter));
+        if(game.finished()&&game.chapter()<Adventure.CHAPTERS-1)controls.addView(button("Nächstes Kapitel",()->{game.act("next");save();showMenu();}));
         controls.addView(button("Am Handy spielen",()->startGame(false)));
         Button vrButton=button("Mit VR-Brille spielen",()->instructions());vrButton.setEnabled(tracker.available());controls.addView(vrButton);
         Button alignment=button("VR-Bild ausrichten",this::alignmentInstructions);alignment.setEnabled(tracker.available());controls.addView(alignment);
         if(!tracker.available())controls.addView(text("Kein geeigneter Bewegungssensor erkannt. Der Handy-Modus funktioniert trotzdem.",12,0xffb8c7d8));
         controls.addView(button("Einstellungen & Ton",this::settings));
         controls.addView(button("Updates",this::checkUpdates));
-        controls.addView(button("Abenteuer neu starten",()->new AlertDialog.Builder(this).setTitle("Neu anfangen?").setMessage("Dein bisheriger Spielstand wird zurückgesetzt.").setNegativeButton("Zurück",null).setPositiveButton("Neu starten",(d,n)->{game=new Adventure();save();showMenu();}).show()));
-        controls.addView(text("Version "+BuildConfig.VERSION_NAME+" · Drei Räume · Ohne Zeitdruck",11,0xff9cadc4));setContentView(root);
+        controls.addView(button("Kapitel neu starten",()->new AlertDialog.Builder(this).setTitle("Kapitel neu starten?").setMessage("Das aktuelle Kapitel von "+profiles.active().name()+" beginnt neu. Andere Kapitel und Profile bleiben erhalten.").setNegativeButton("Zurück",null).setPositiveButton("Neu starten",(d,n)->{game.restartChapter();save();showMenu();}).show()));
+        controls.addView(text("Version "+BuildConfig.VERSION_NAME+" · Fünf Kapitel · Ohne Zeitdruck",11,0xff9cadc4));setContentView(root);
     }
     private void instructions(){new AlertDialog.Builder(this).setTitle("Bereit für die Sternenreise?")
         .setMessage("Setz dich bequem hin. Halte das Handy quer und gerade vor dich. Nach dem Start hast du 5 Sekunden, um es in die Brille zu legen.\n\nSchau einen Gegenstand an, bis sich der Kreis füllt. Lumi gibt dir Hinweise. Hinter dir findest du die Pause.\n\nLautstärketaste: Blick neu ausrichten. Android-Zurück: Pause. Fang mit einer kurzen Runde an; bei Unwohlsein die Brille abnehmen.")
@@ -91,19 +98,48 @@ public final class MainActivity extends Activity implements WorldRenderer.Events
         surface=new GLSurfaceView(this);surface.setEGLContextClientVersion(2);surface.setPreserveEGLContextOnPause(true);
         renderer=new WorldRenderer(this,game,tracker,stereo,prefs.getFloat("lens",.16f),prefs.getFloat("ipd",.064f),this);surface.setRenderer(renderer);
         surface.setOnTouchListener((v,e)->{if(e.getAction()==MotionEvent.ACTION_DOWN){previousX=e.getX();previousY=e.getY();return true;}if(e.getAction()==MotionEvent.ACTION_MOVE){if(!vr&&renderer!=null)renderer.look((previousX-e.getX())*.12f,(previousY-e.getY())*.12f);previousX=e.getX();previousY=e.getY();return true;}if(e.getAction()==MotionEvent.ACTION_UP){v.performClick();return true;}return true;});
-        setContentView(surface);immersive();if(stereo&&foreground)tracker.start();speak(game.hint());
+        setContentView(surface);immersive();if(stereo&&foreground)tracker.start();speak(game.opening());
     }
     @Override public void activate(String id){
         runOnUiThread(()->{
             if(!inGame||!foreground||surface==null)return;
             if("menu".equals(id)){showMenu();return;}
-            GLSurfaceView current=surface;WorldRenderer currentRenderer=renderer;
-            current.queueEvent(()->{String result=game.act(id);String state=game.save();currentRenderer.refresh(result);
-                runOnUiThread(()->{prefs.edit().putString("state",state).apply();if(inGame)speak(result);});});
+            GLSurfaceView current=surface;WorldRenderer currentRenderer=renderer;String profileId=profiles.active().id();long epoch=storyEpoch;Adventure sourceGame=game;
+            current.queueEvent(()->{String result=sourceGame.act(id);String state=sourceGame.save();currentRenderer.refresh(result);
+                runOnUiThread(()->{if(epoch!=storyEpoch)return;if(profiles.store(profileId,state))persistProfiles();if(inGame&&profileId.equals(profiles.active().id()))speak(result);});});
         });
     }
     @Override public void menu(){runOnUiThread(this::showMenu);}
-    private void save(){prefs.edit().putString("state",game.save()).apply();}
+    private void persistProfiles(){prefs.edit().putString("profiles",profiles.save()).apply();}
+    private void save(){profiles.store(profiles.active().id(),game.save());persistProfiles();}
+    private void chooseProfile(){
+        stopGame();java.util.List<PlayerProfiles.Profile> list=profiles.all();String[] labels=new String[list.size()];
+        for(int i=0;i<labels.length;i++){PlayerProfiles.Profile player=list.get(i);labels[i]=(player.id().equals(profiles.active().id())?"★ ":"☆ ")+player.name()+" · Kapitel "+(Adventure.restore(player.state()).chapter()+1);}
+        new AlertDialog.Builder(this).setTitle("Wer spielt?").setItems(labels,(d,n)->{profiles.select(list.get(n).id());game=Adventure.restore(profiles.active().state());persistProfiles();showMenu();})
+            .setPositiveButton("Neues Profil",(d,n)->profileName(null)).setNeutralButton("Verwalten",(d,n)->manageProfiles()).setNegativeButton("Zurück",null).show();
+    }
+    private void profileName(String id){
+        EditText input=new EditText(this);input.setSingleLine(true);input.setHint("Name");input.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(24)});
+        if(id!=null)for(PlayerProfiles.Profile p:profiles.all())if(p.id().equals(id))input.setText(p.name());
+        new AlertDialog.Builder(this).setTitle(id==null?"Neues Spielerprofil":"Profil umbenennen").setView(input).setNegativeButton("Zurück",null)
+            .setPositiveButton("Speichern",(d,n)->{try{stopGame();if(id==null){profiles.create(input.getText().toString());game=Adventure.restore(profiles.active().state());}else profiles.rename(id,input.getText().toString());persistProfiles();showMenu();}
+                catch(IllegalArgumentException invalid){Toast.makeText(this,invalid.getMessage(),Toast.LENGTH_LONG).show();chooseProfile();}}).show();
+    }
+    private void manageProfiles(){
+        java.util.List<PlayerProfiles.Profile> list=profiles.all();String[] names=new String[list.size()];for(int i=0;i<names.length;i++)names[i]=list.get(i).name();
+        new AlertDialog.Builder(this).setTitle("Profil verwalten").setItems(names,(d,n)->{PlayerProfiles.Profile selected=list.get(n);
+            new AlertDialog.Builder(this).setTitle(selected.name()).setItems(new String[]{"Umbenennen","Profil löschen"},(dialog,action)->{
+                if(action==0)profileName(selected.id());else new AlertDialog.Builder(this).setTitle("Profil löschen?").setMessage("Die gesamte Geschichte von "+selected.name()+" wird gelöscht.").setNegativeButton("Zurück",null)
+                    .setPositiveButton("Löschen",(confirm,button)->{stopGame();if(!profiles.delete(selected.id()))Toast.makeText(this,"Mindestens ein Profil muss erhalten bleiben.",Toast.LENGTH_LONG).show();game=Adventure.restore(profiles.active().state());persistProfiles();showMenu();}).show();
+            }).setNegativeButton("Zurück",null).show();
+        }).setNegativeButton("Zurück",null).show();
+    }
+    private void chooseChapter(){
+        stopGame();String[] chapters=new String[Adventure.CHAPTERS];for(int i=0;i<chapters.length;i++)chapters[i]=(game.completed(i)?"★ ":game.canOpen(i)?"☆ ":"🔒 ")+(i+1)+". "+game.chapterTitle(i);
+        new AlertDialog.Builder(this).setTitle("Kapitel · "+profiles.active().name()).setItems(chapters,(d,index)->{
+            if(game.openChapter(index)){save();showMenu();}else Toast.makeText(this,"Löse zuerst das vorherige Kapitel.",Toast.LENGTH_LONG).show();
+        }).setNegativeButton("Zurück",null).show();
+    }
     private SeekBar settingSlider(LinearLayout body,String title,int maximum,int progress,float minimum,float step){
         TextView label=text("",15,0xff293c52);body.addView(label);SeekBar slider=new SeekBar(this);slider.setMax(maximum);slider.setProgress(Math.max(0,Math.min(maximum,progress)));body.addView(slider);
         String format=step<.1f?"%s: %.2f":"%s: %.1f";

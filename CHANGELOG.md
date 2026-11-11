@@ -1,3 +1,13 @@
+# 0.3.0
+
+- Bis zu acht getrennte Spielerprofile mit eigenen Geschichten und Kapitelständen; vorhandener Spielstand wird als erstes Profil übernommen.
+- Vier neue Kapitel: Mondpost, Tauquelle, Sternenuhr und Sternenfähre mit abschließendem Zeichenrätsel.
+- Steigende Schwierigkeit durch logische Reihenfolgen, Abmessen, gekoppelte Mechanismen, sichere Transporte und kombinierte Hinweise.
+- Kapitelwahl mit fortsetzbaren Zwischenständen und Wiederholen einzelner Kapitel.
+- Neue gemalte Figuren und Gegenstände sowie ein neuer Fährplatz am Bach.
+- Benötigte Objekte stehen seitlich oder hinter dem Spieler. Blickauswahl erfordert nach Einstieg und Aktionen bewusstes Weg- und erneutes Hinschauen.
+- Vollständige Kampagne, getrennte Profile, Speicherübernahme und versehentliche Blickauswahl werden geprüft.
+
 # 0.2.2
 
 - Kopfsteuerung korrigiert: Android-Sensormatrizen werden vor der OpenGL-Berechnung vom Zeilen- ins Spaltenformat konvertiert. Querformat, umgekehrtes Querformat und neue Blickmitte verwenden dieselbe lokale Kamerabasis.
